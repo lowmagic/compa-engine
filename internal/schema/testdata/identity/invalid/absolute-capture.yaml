@@ -1,0 +1,2 @@
+# want: /capture
+{"capture": "/a/b", "target_kind": "host", "target": "x", "time": null, "local_time": null, "raw_time": null, "problems": []}

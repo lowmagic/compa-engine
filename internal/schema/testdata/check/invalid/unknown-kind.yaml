@@ -1,0 +1,10 @@
+# want: kind
+schema: compa.lowmag.cc/expert/check/v1alpha2
+engine_api: 0.1.1
+roots: [experts]
+packages:
+  - {kind: router, id: x, version: 0.1.0, digest: 'sha256:0000000000000000000000000000000000000000000000000000000000000000', dir: experts/x, usable: true, tests: [], cases: {run: 0, failures: []}, warnings: []}
+failed: []
+errors: []
+warnings: []
+totals: {packages: 1, errors: 0, warnings: 0, cases: 0}

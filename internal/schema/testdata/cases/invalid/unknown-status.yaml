@@ -1,0 +1,8 @@
+# want: status
+apiVersion: compa.lowmag.cc/expert/v1alpha2
+kind: Cases
+tool: fixture.files.ls
+root: ../root
+modified: 2026-03-01T12:00:00Z
+cases:
+  - {name: the root, status: no_match, output: ''}

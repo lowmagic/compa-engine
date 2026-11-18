@@ -1,0 +1,10 @@
+# want: problem
+schema: compa.lowmag.cc/expert/check/v1alpha2
+engine_api: 0.1.1
+roots: [experts]
+packages:
+  - {kind: catalog, id: x, version: 0.1.0, digest: 'sha256:0000000000000000000000000000000000000000000000000000000000000000', dir: experts/x, usable: true, tests: [x.a], cases: {run: 1, failures: [{tool: x.a, case: one}]}, warnings: []}
+failed: []
+errors: []
+warnings: []
+totals: {packages: 1, errors: 1, warnings: 0, cases: 1}

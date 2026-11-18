@@ -1,0 +1,17 @@
+{
+  "turns": [
+    {
+      "when": "# Comments to read",
+      "answers": [
+        {"calls": [{"name": "ledger_update", "args": {
+          "items": [
+            {"kind": "reports", "who": "customer", "text": "A synthetic report: it started after the upgrade.", "comment": "e1", "status": "none"},
+            {"kind": "asks", "who": "support", "text": "Send a fresh must-gather.", "comment": "e3", "status": "open"}
+          ],
+          "updates": [],
+          "none": [{"comment": "e2", "why": "nothing_new"}]
+        }}]}
+      ]
+    }
+  ]
+}

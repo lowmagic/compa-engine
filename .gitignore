@@ -1,0 +1,24 @@
+.env
+.env.*
+.DS_Store
+
+# Go test, coverage and profiling output
+*.test
+*.out
+*.prof
+
+# A workspace spanning this module, a deployment and an expert repository
+# is local developer state.
+go.work
+go.work.sum
+
+# Case stores. The engine writes case data outside the repository, but a
+# misconfigured local run must not be able to stage it.
+*.db
+*.db-wal
+*.db-shm
+/.compa/
+
+# Credentials
+kubeconfig
+*.kubeconfig

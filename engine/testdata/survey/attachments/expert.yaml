@@ -1,0 +1,7 @@
+apiVersion: compa.lowmag.cc/expert/v1alpha3
+kind: Expert
+metadata: {id: case.attachments, version: 0.1.0, title: Case attachments (fixture), summary: 'What a case''s attachments hold (fixture)'}
+spec:
+  engineApi: '>=0.2.0 <0.3.0'
+  analyst: analyst.md
+  tests: [attachments.files]

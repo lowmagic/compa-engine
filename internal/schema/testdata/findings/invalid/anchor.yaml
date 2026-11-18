@@ -1,0 +1,4 @@
+# want: got string, want boolean
+findings:
+  - {statement: s1, kind: unsupported, quote: x, why: y, suggested: cite it, anchor: "yes"}
+supported: []

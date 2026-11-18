@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://compa.lowmag.cc/ledger/update/v1alpha2",
+  "title": "Case ledger update",
+  "description": "A model's reading of case comments not yet in the case ledger, as the arguments of its ledger_update call: what each comment asks, commits to, reports or provides, and which earlier items a new comment settles, supersedes or withdraws. Every item cites the comment it comes from, and every change the later comment that makes it, by the name the request gave it. A reading, never verified fact and never evidence (docs/MODEL_API.md §The case ledger).",
+  "type": "object",
+  "required": ["items", "updates"],
+  "additionalProperties": false,
+  "properties": {
+    "items": {"type": "array", "maxItems": 100, "items": {"$ref": "#/$defs/item"}},
+    "updates": {"type": "array", "maxItems": 100, "items": {"$ref": "#/$defs/update"}},
+    "none": {
+      "description": "The comments given that hold nothing to record, each with why, so every comment read is accounted for: by an item, a change it makes, or here.",
+      "type": "array",
+      "maxItems": 100,
+      "items": {"$ref": "#/$defs/none"}
+    },
+    "notes": {"type": "array", "maxItems": 10, "items": {"type": "string", "maxLength": 500}}
+  },
+  "$defs": {
+    "comment": {"description": "A comment by the name the request gave it, such as e12.", "type": "string", "minLength": 1, "maxLength": 128},
+    "item": {
+      "description": "One thing a comment asks, commits to, reports or provides, in one line, citing the comment. An ask is open until a later comment answers or rules it out; a commitment pending until a later comment shows it done or dropped; what was provided stands until a later comment supersedes it.",
+      "type": "object",
+      "required": ["kind", "who", "text", "comment", "status"],
+      "additionalProperties": false,
+      "properties": {
+        "kind": {"enum": ["asks", "commits", "reports", "provides"]},
+        "who": {"enum": ["customer", "support"]},
+        "text": {"type": "string", "minLength": 1, "maxLength": 300},
+        "comment": {"$ref": "#/$defs/comment"},
+        "due": {"description": "For a commitment, when it was promised by, as the comment says it.", "type": "string", "maxLength": 100},
+        "attachment": {"description": "For what was provided, the attachment as the comment names it.", "type": "string", "maxLength": 300},
+        "status": {
+          "description": "An ask open, or answered or ruled out by a later comment among those given; a commitment pending, or done or dropped by one; what was provided none, or superseded by one; a report none. A settled or superseded status names that later comment in because.",
+          "enum": ["open", "answered", "ruled_out", "pending", "done", "dropped", "superseded", "none"]
+        },
+        "because": {"$ref": "#/$defs/comment"}
+      }
+    },
+    "none": {
+      "description": "A comment that holds nothing to record: courtesy (thanks, greetings), automated (a system's message), a repeat of an earlier comment, or nothing new otherwise.",
+      "type": "object",
+      "required": ["comment", "why"],
+      "additionalProperties": false,
+      "properties": {
+        "comment": {"$ref": "#/$defs/comment"},
+        "why": {"enum": ["courtesy", "automated", "repeat", "nothing_new"]}
+      }
+    },
+    "update": {
+      "description": "A change to an item the ledger holds, by its ID, which a later comment makes: an ask answered or ruled out, a commitment done or dropped, what was provided superseded by a newer capture asked for or sent or by a report that the state it captured is gone; or any item withdrawn, because an edited version of its own comment no longer says it.",
+      "type": "object",
+      "required": ["item", "status", "because"],
+      "additionalProperties": false,
+      "properties": {
+        "item": {"type": "string", "pattern": "^l[1-9][0-9]*$"},
+        "status": {"enum": ["answered", "ruled_out", "done", "dropped", "superseded", "withdrawn"]},
+        "because": {"$ref": "#/$defs/comment"},
+        "note": {"type": "string", "maxLength": 300}
+      }
+    }
+  }
+}

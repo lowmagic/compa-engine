@@ -1,0 +1,8 @@
+# want: totals
+schema: compa.lowmag.cc/expert/check/v1alpha2
+engine_api: 0.1.1
+roots: []
+packages: []
+failed: []
+errors: []
+warnings: []

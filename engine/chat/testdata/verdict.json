@@ -1,0 +1,36 @@
+{
+  "turns": [
+    {
+      "when": "Orient me",
+      "answers": [
+        {"calls": [{"name": "grep", "args": {"pattern": "error syncing node", "path": "namespaces/openshift-ovn-kubernetes"}}]},
+        {"text": "The controller logged `error syncing node worker-9` on every node of the pool while the cluster was upgraded from one minor release to the next, through the whole of the maintenance window the customer had planned for it, and again after it ended. It also logged `failed to get chassis 0000`. Each of its pods has `16 GiB / 4 = 5 GiB`, and `16 GiB / 4 = 4 GiB` is what the limit allows. Nothing logged `zqxj vbnm`."}
+      ]
+    },
+    {
+      "when": "Draft Customer update",
+      "answers": [
+        {"text": "Hello, the OVN controller logged `error syncing node worker-7`; we are reading its logs."}
+      ]
+    },
+    {
+      "when": "which model",
+      "answers": [
+        {"text": "The first model answers."}
+      ]
+    },
+    {
+      "when": "# Comments to read",
+      "answers": [
+        {"calls": [{"name": "ledger_update", "args": {
+          "items": [
+            {"kind": "reports", "who": "customer", "text": "A synthetic report: it started after the upgrade.", "comment": "e1", "status": "none"},
+            {"kind": "asks", "who": "support", "text": "Send a fresh must-gather.", "comment": "e3", "status": "open"}
+          ],
+          "updates": [],
+          "none": [{"comment": "e2", "why": "nothing_new"}]
+        }}]}
+      ]
+    }
+  ]
+}

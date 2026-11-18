@@ -1,0 +1,45 @@
+{
+  "turns": [
+    {
+      "when": "Orient me",
+      "answers": [
+        {"calls": [{"name": "grep", "args": {"pattern": "error syncing node", "path": "namespaces/openshift-ovn-kubernetes", "question": "Did the OVN controller fail to sync worker-1?"}}]},
+        {"text": "The OVN controller cannot sync worker-1."}
+      ]
+    },
+    {
+      "when": "what failed",
+      "answers": [
+        {"calls": [
+          {"name": "grep", "args": {"pattern": "failed to get chassis", "path": "namespaces/openshift-ovn-kubernetes", "question": "Does the OVN controller on worker-1 fail to get its chassis before the DNS timeouts began, and does it say which chassis it was looking for each time it retried?"}},
+          {"name": "find", "args": {"path": "namespaces"}}
+        ]},
+        {"text": "The OVN controller on worker-1 cannot get its chassis."}
+      ]
+    },
+    {
+      "when": "and then",
+      "answers": [
+        {"calls": [{"name": "evidence_read", "args": {"id": "e1", "question": "What do the case details say of worker-1?"}}]},
+        {"calls": [{"name": "find", "args": {"path": "namespaces", "question": "Which namespaces did the must-gather collect?", "answers": [
+          {"item": "e1", "answer": "the case details name worker-1 and worker-2"},
+          {"item": "e999", "answer": "`no such marker 7f3a` in it"}
+        ]}}]},
+        {"text": "Nothing more."}
+      ]
+    },
+    {
+      "when": "# Comments to read",
+      "answers": [
+        {"calls": [{"name": "ledger_update", "args": {
+          "items": [
+            {"kind": "reports", "who": "customer", "text": "A synthetic report: it started after the upgrade.", "comment": "e1", "status": "none"},
+            {"kind": "asks", "who": "support", "text": "Send a fresh must-gather.", "comment": "e3", "status": "open"}
+          ],
+          "updates": [],
+          "none": [{"comment": "e2", "why": "nothing_new"}]
+        }}]}
+      ]
+    }
+  ]
+}

@@ -1,0 +1,85 @@
+{
+  "turns": [
+    {
+      "when": "## Disclosed to the companion, not cited",
+      "answers": [
+        {
+          "calls": [
+            {
+              "name": "check_findings",
+              "args": {
+                "findings": [
+                  {
+                    "statement": "s1",
+                    "kind": "undetermined",
+                    "quote": "OVN controller",
+                    "why": "e1:2 is one line, and no evidence the text does not cite settles it",
+                    "evidence": ["e1:2"],
+                    "alternative": "new errors in evidence the text does not cite",
+                    "discriminator": "the controller's whole log since, not given",
+                    "suggested": "the lines given show no new error"
+                  }
+                ],
+                "supported": []
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "when": "The text is the draft i1",
+      "answers": [
+        {
+          "calls": [
+            {
+              "name": "check_findings",
+              "args": {
+                "findings": [
+                  {
+                    "statement": "s1",
+                    "kind": "certainty",
+                    "quote": "the investigation confirms the OVN controller on worker-1 cannot sync",
+                    "why": "e1:2 shows one sync error on worker-1, not a cause",
+                    "evidence": ["e1:2"],
+                    "alternative": "a transient API outage during the sync",
+                    "discriminator": "the controller's log after the error, not given",
+                    "suggested": "the OVN controller on worker-1 reported a sync error"
+                  }
+                ],
+                "supported": []
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "when": "s1: The OVN controller logs nothing new",
+      "answers": [
+        {
+          "calls": [
+            {
+              "name": "check_findings",
+              "args": {
+                "findings": [
+                  {
+                    "statement": "s1",
+                    "kind": "overstated",
+                    "quote": "logs nothing new",
+                    "why": "e1:2 is one line of the log, not the whole of it",
+                    "evidence": ["e1:2"],
+                    "alternative": "new errors past the lines given",
+                    "discriminator": "the controller's whole log since, not given",
+                    "suggested": "the lines given show no new error"
+                  }
+                ],
+                "supported": []
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

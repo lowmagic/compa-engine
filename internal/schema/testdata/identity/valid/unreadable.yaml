@@ -1,0 +1,2 @@
+# Synthetic: a nested must-gather root without a ClusterVersion.
+{"capture": "0010-must-gather/nested", "target_kind": "cluster", "target": null, "time": null, "local_time": null, "raw_time": null, "problems": ["no ClusterVersion"]}

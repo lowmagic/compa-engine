@@ -1,0 +1,242 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://compa.lowmag.cc/expert/tests/v1alpha2",
+  "title": "Expert tests (tests.yaml)",
+  "type": "object",
+  "required": [
+    "apiVersion",
+    "kind",
+    "tests"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "apiVersion": {
+      "const": "compa.lowmag.cc/expert/v1alpha2"
+    },
+    "kind": {
+      "const": "Tests"
+    },
+    "tests": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/test"
+      }
+    }
+  },
+  "$defs": {
+    "test": {
+      "type": "object",
+      "required": [
+        "id",
+        "version",
+        "run"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "https://compa.lowmag.cc/expert/manifest/v1alpha2#/$defs/dottedId"
+        },
+        "version": {
+          "$ref": "https://compa.lowmag.cc/expert/manifest/v1alpha2#/$defs/semver"
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "summary": {
+          "description": "One line saying what the test reads and answers, offered to a model in place of the description, which it may ask for.",
+          "type": "string",
+          "maxLength": 120,
+          "pattern": "^[^\\n]*$"
+        },
+        "params": {
+          "type": "object",
+          "patternProperties": {
+            "^[a-z][a-z0-9_]*$": {
+              "$ref": "#/$defs/param"
+            }
+          },
+          "additionalProperties": false,
+          "maxProperties": 32
+        },
+        "preconditions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "exists"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "exists": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 512
+              }
+            }
+          }
+        },
+        "run": {
+          "$ref": "#/$defs/pipeline"
+        },
+        "output": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "format": {
+              "enum": [
+                "text",
+                "json",
+                "lines"
+              ]
+            },
+            "description": {
+              "type": "string",
+              "maxLength": 2000
+            }
+          }
+        },
+        "interpret": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_][A-Za-z0-9_./-]*(#[A-Za-z0-9_-]+)?$",
+          "maxLength": 512
+        },
+        "fixtures": {
+          "$ref": "https://compa.lowmag.cc/expert/manifest/v1alpha2#/$defs/packagePath"
+        }
+      }
+    },
+    "param": {
+      "type": "object",
+      "required": [
+        "type"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "enum": [
+            "string",
+            "integer",
+            "number",
+            "boolean"
+          ]
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 1000
+        },
+        "default": {
+          "type": [
+            "string",
+            "integer",
+            "number",
+            "boolean"
+          ]
+        },
+        "enum": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": [
+              "string",
+              "integer",
+              "number",
+              "boolean"
+            ]
+          }
+        },
+        "pattern": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "minimum": {
+          "type": "number"
+        },
+        "maximum": {
+          "type": "number"
+        },
+        "maxLength": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "pipeline": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 16,
+      "items": {
+        "$ref": "#/$defs/stage"
+      }
+    },
+    "stage": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/argv"
+        },
+        {
+          "$ref": "#/$defs/primitiveStage"
+        }
+      ]
+    },
+    "argv": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 256,
+      "items": {
+        "type": "string",
+        "maxLength": 4096
+      }
+    },
+    "primitiveStage": {
+      "type": "object",
+      "minProperties": 1,
+      "maxProperties": 1,
+      "properties": {
+        "find": {
+          "$ref": "#/$defs/primitiveParams"
+        },
+        "grep": {
+          "$ref": "#/$defs/primitiveParams"
+        },
+        "read": {
+          "$ref": "#/$defs/primitiveParams"
+        },
+        "jq": {
+          "$ref": "#/$defs/primitiveParams"
+        },
+        "yq": {
+          "$ref": "#/$defs/primitiveParams"
+        },
+        "logs.window": {
+          "$ref": "#/$defs/primitiveParams"
+        },
+        "logs.count": {
+          "$ref": "#/$defs/primitiveParams"
+        },
+        "aggregate": {
+          "$ref": "#/$defs/primitiveParams"
+        },
+        "diff": {
+          "$ref": "#/$defs/primitiveParams"
+        },
+        "archive.list": {
+          "$ref": "#/$defs/primitiveParams"
+        }
+      },
+      "additionalProperties": false
+    },
+    "primitiveParams": {
+      "oneOf": [
+        {
+          "type": "string",
+          "maxLength": 4096
+        },
+        {
+          "type": "object"
+        }
+      ]
+    }
+  }
+}

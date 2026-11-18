@@ -1,0 +1,18 @@
+{
+  "turns": [
+    {
+      "when": "ask the platform expert",
+      "answers": [
+        {"calls": [{"name": "consult", "args": {"expert": "openshift.platform", "question": "What did the OVN controller log about syncing worker-1?"}}]},
+        {"text": "The platform expert read the OVN controller's log: it cannot sync worker-1 [e6:1]."}
+      ]
+    },
+    {
+      "when": "What did the OVN controller log about syncing worker-1?",
+      "answers": [
+        {"calls": [{"name": "grep", "args": {"pattern": "error syncing node", "path": "namespaces/openshift-ovn-kubernetes"}}]},
+        {"text": "It logged `error syncing node` for worker-1 [e6:1]."}
+      ]
+    }
+  ]
+}

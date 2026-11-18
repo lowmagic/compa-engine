@@ -1,0 +1,12 @@
+# Synthetic fixture for the epistemic checks' tests: invented, nothing from a customer.
+items:
+  - lastTimestamp: "2026-10-20T08:20:14Z"
+    involvedObject: {kind: Pod, name: rook-ceph-mgr-a-6b7c8}
+    source: {component: kubelet, host: worker-1}
+    reason: Started
+    message: Started container mgr
+  - lastTimestamp: "2026-10-20T08:21:40Z"
+    involvedObject: {kind: Pod, name: rook-ceph-mds-fs-a-9d0e1}
+    source: {component: kubelet, host: worker-1}
+    reason: BackOff
+    message: Back-off restarting failed container mds

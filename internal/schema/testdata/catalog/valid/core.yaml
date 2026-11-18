@@ -1,0 +1,7 @@
+apiVersion: compa.lowmag.cc/expert/v1alpha2
+kind: Catalog
+metadata: {id: openshift.core, version: 0.1.0, title: OpenShift core tools}
+spec:
+  engineApi: '>=0.2.0 <0.3.0'
+  binaries: [omc]
+  tests: [openshift.core.operator_conditions, openshift.core.pods]

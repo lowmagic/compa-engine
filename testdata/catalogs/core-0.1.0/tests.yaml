@@ -1,0 +1,33 @@
+apiVersion: compa.lowmag.cc/expert/v1alpha2
+kind: Tests
+tests:
+  - id: fixture.core.node_ready
+    version: 0.1.0
+    description: Each node's name and the status of its Ready condition, as JSON objects.
+    params:
+      node: {type: string, default: '', maxLength: 253, pattern: '^[a-z0-9.-]*$'}
+    preconditions: [{exists: cluster-scoped-resources/core/nodes}]
+    run:
+      - yq:
+          path: cluster-scoped-resources/core/nodes
+          glob: '*.yaml'
+          filter: 'select($node == "" or .metadata.name == $node) | {name: .metadata.name, ready: (.status.conditions[] | select(.type == "Ready") | .status)}'
+    output: {format: json}
+    fixtures: fixtures/node_ready
+  - id: fixture.core.degraded_operators
+    version: 0.1.0
+    description: Names of ClusterOperators reporting Degraded=True, one per line.
+    run:
+      - read: cluster-scoped-resources/config.openshift.io/clusteroperators.yaml
+      - yq: {raw: true, filter: '.items[] | select(.status.conditions[] | select(.type == "Degraded" and .status == "True")) | .metadata.name'}
+    output: {format: lines}
+    fixtures: fixtures/degraded_operators
+  - id: fixture.core.pods
+    version: 0.1.0
+    description: Pods in one namespace as omc prints them in JSON.
+    params:
+      namespace: {type: string, pattern: '^[a-z0-9-]+$', maxLength: 63}
+    run:
+      - [omc, get, pods, -n, '{{namespace}}', -o, json]
+    output: {format: json}
+    fixtures: fixtures/pods

@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://compa.lowmag.cc/expert/identity/v1alpha2",
+  "title": "One line of a catalog's capture identity tool's output",
+  "description": "One capture the identity tool found beneath the attachment directory it was given (engine API 0.2.1). Every field is present; a value the capture does not state is null and the reason is in problems.",
+  "type": "object",
+  "required": ["capture", "target_kind", "target", "time", "local_time", "raw_time", "problems"],
+  "additionalProperties": false,
+  "properties": {
+    "capture": {
+      "description": "The capture's root or report directory, relative to the artifact root.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1024,
+      "pattern": "^[^/]"
+    },
+    "target_kind": {"enum": ["cluster", "host"]},
+    "target": {
+      "description": "The cluster ID or host name, null when it cannot be read.",
+      "type": ["string", "null"],
+      "minLength": 1,
+      "maxLength": 255
+    },
+    "time": {
+      "description": "The capture time with its offset, where the capture states one.",
+      "type": ["string", "null"],
+      "format": "date-time"
+    },
+    "local_time": {
+      "description": "The capture time without a zone, where the capture states none.",
+      "type": ["string", "null"],
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]{1,9})?$"
+    },
+    "raw_time": {
+      "description": "The capture time as the capture states it.",
+      "type": ["string", "null"],
+      "maxLength": 200
+    },
+    "problems": {
+      "description": "Short reasons a field could not be read or is in doubt.",
+      "type": "array",
+      "maxItems": 16,
+      "items": {"type": "string", "minLength": 1, "maxLength": 300}
+    }
+  }
+}

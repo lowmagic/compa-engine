@@ -1,0 +1,5 @@
+# want: /apiVersion
+apiVersion: compa.lowmag.cc/expert/v1alpha2
+kind: Expert
+metadata: {id: openshift.platform, version: 0.1.0, summary: Nodes and operators}
+spec: {engineApi: '>=0.2.0 <0.3.0', analyst: analyst.md}

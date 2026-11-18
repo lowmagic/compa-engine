@@ -1,0 +1,9 @@
+apiVersion: compa.lowmag.cc/expert/v1alpha2
+kind: Catalog
+metadata: {id: fixture.captures, version: 0.1.0, title: Capture identity tools (synthetic fixture)}
+spec:
+  engineApi: '>=0.2.1 <0.3.0'
+  tests: [fixture.captures.gather_identity, fixture.captures.sos_identity]
+  captures:
+    - {kind: must-gather, marks: [cluster-scoped-resources], identity: gather_identity}
+    - {kind: sosreport, marks: [sos_commands], identity: sos_identity}

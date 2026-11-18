@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://compa.lowmag.cc/routing/terms/v1alpha1",
+  "title": "Routing term dictionary",
+  "description": "Plain-language terms and the canonical routing keys each may point to, with provenance. Maintained with the experts. A term found in a case's text is vocabulary shown to routing, never an established mechanism; it carries no weight.",
+  "type": "object",
+  "required": ["apiVersion", "kind", "revision", "terms"],
+  "additionalProperties": false,
+  "properties": {
+    "apiVersion": {"const": "compa.lowmag.cc/routing/v1alpha1"},
+    "kind": {"const": "TermDictionary"},
+    "revision": {"type": "string", "minLength": 1, "maxLength": 128},
+    "terms": {
+      "type": "array",
+      "maxItems": 5000,
+      "items": {
+        "type": "object",
+        "required": ["term", "keys"],
+        "additionalProperties": false,
+        "properties": {
+          "term": {"type": "string", "minLength": 2, "maxLength": 100},
+          "keys": {"type": "array", "minItems": 1, "maxItems": 16, "uniqueItems": true, "items": {"$ref": "https://compa.lowmag.cc/expert/manifest/v1alpha2#/$defs/routingKey"}},
+          "provenance": {"$ref": "https://compa.lowmag.cc/routing/library/v1alpha1#/$defs/provenance"}
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "turns": [
+    {
+      "when": "which model",
+      "answers": [
+        {"text": "The other model answers."}
+      ]
+    }
+  ]
+}

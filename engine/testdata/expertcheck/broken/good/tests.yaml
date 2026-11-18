@@ -1,0 +1,10 @@
+apiVersion: compa.lowmag.cc/expert/v1alpha2
+kind: Tests
+tests:
+  - id: check.good.one
+    version: 0.1.0
+    description: Pods in one namespace.
+    params: {ns: {type: string, default: default}}
+    run:
+      - [omc, get, pods, -n, '{{ns}}', -o, json]
+    fixtures: fixtures/one

@@ -1,0 +1,13 @@
+apiVersion: compa.lowmag.cc/expert/v1alpha2
+kind: Tests
+tests:
+  - id: openshift.core.pods
+    version: 0.1.0
+    description: Pods in one namespace, with phase and restart counts, as JSON lines.
+    params:
+      namespace: {type: string, pattern: '^[a-z0-9-]+$'}
+    run:
+      - [omc, get, pods, -n, '{{namespace}}', -o, json]
+      - jq: '.items[] | {name: .metadata.name, phase: .status.phase}'
+    output: {format: json}
+    fixtures: fixtures/pods

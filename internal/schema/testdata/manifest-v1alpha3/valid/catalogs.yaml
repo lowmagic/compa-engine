@@ -1,0 +1,12 @@
+apiVersion: compa.lowmag.cc/expert/v1alpha3
+kind: Expert
+metadata: {id: openshift.storage, version: 0.1.0, title: OpenShift Storage, summary: 'A manifest for the schema''s tests'}
+spec:
+  engineApi: '>=0.2.0 <0.3.0'
+  analyst: analyst.md
+  catalogs:
+    - id: openshift.core
+      version: '>=0.1.0 <0.2.0'
+      tools: [operator_conditions, pods]
+  tests: [storage.csi_attach]
+  binaries: [omc]

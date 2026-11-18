@@ -1,0 +1,2 @@
+# Synthetic: a sosreport whose date file gives no zone.
+{"capture": "0020-sosreport/sosreport-host-a", "target_kind": "host", "target": "host-a.example.test", "time": null, "local_time": "2026-09-24T10:18:29", "raw_time": "2026-09-24 10:18:29", "problems": ["the date file gives no zone"]}

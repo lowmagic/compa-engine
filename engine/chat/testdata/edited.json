@@ -1,0 +1,111 @@
+{
+  "turns": [
+    {
+      "when": "wording please",
+      "answers": [
+        {
+          "text": "The upgrade confirms that the OVN controller failures were caused by worker-1 [e1:2]. The OVN controller cannot sync worker-1 [e1:2]."
+        }
+      ]
+    },
+    {
+      "when": "anchor please",
+      "answers": [
+        {
+          "text": "The operator restarted ovnkube-node at 09:00 [e1:2]."
+        }
+      ]
+    },
+    {
+      "when": "fail please",
+      "answers": [
+        {
+          "text": "The OVN controller logs nothing new [e1:2]."
+        }
+      ]
+    },
+    {
+      "when": "Draft Customer update",
+      "answers": [
+        {
+          "text": "Hello, the investigation confirms the OVN controller on worker-1 cannot sync; we are reading its logs."
+        }
+      ]
+    },
+    {
+      "when": "tool revision please",
+      "answers": [
+        {
+          "text": "The operator restarted ovnkube-master at 10:00 [e1:2]."
+        }
+      ]
+    },
+    {
+      "when": "transport revision please",
+      "answers": [
+        {
+          "text": "The operator restarted ovnkube-control at 10:00 [e1:2]."
+        }
+      ]
+    },
+    {
+      "when": "empty revision please",
+      "answers": [
+        {
+          "text": "The operator restarted ovnkube-identity at 10:00 [e1:2]."
+        }
+      ]
+    },
+    {
+      "when": "findings please",
+      "answers": [
+        {
+          "text": "The controller logged `no such marker 7f3a` [e999:2]; see e1:2. The operator restarted ovnkube-pods at 09:00 [e1:2]."
+        }
+      ]
+    },
+    {
+      "when": "restarted ovnkube-master",
+      "answers": [
+        {
+          "text": "A REJECTED REVISION that calls a tool.",
+          "calls": [
+            {
+              "name": "grep",
+              "args": {
+                "pattern": "restart",
+                "path": "."
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "when": "restarted ovnkube-control",
+      "answers": []
+    },
+    {
+      "when": "restarted ovnkube-identity",
+      "answers": [
+        {}
+      ]
+    },
+    {
+      "when": "restarted ovnkube-pods",
+      "answers": [
+        {
+          "text": "The controller logged `no such marker 7f3a` [e999:2]; see e1:2. The customer reports that the operator restarted ovnkube-pods at 09:00 [e1:2-3]."
+        }
+      ]
+    },
+    {
+      "when": "# Revise your answer",
+      "answers": [
+        {
+          "text": "The customer reports that the operator restarted ovnkube-node at 09:00 [e1:2]."
+        }
+      ]
+    }
+  ]
+}

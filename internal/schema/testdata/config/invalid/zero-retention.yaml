@@ -1,0 +1,4 @@
+# want: /storage/homeRetentionDays
+apiVersion: compa.lowmag.cc/config/v1alpha1
+kind: Config
+storage: {homeRetentionDays: 0}

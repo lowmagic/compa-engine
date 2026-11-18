@@ -1,0 +1,5 @@
+# Synthetic fixture for the epistemic checks' tests: invented, nothing from a customer.
+# df -h on worker-2, collected 2026-10-20 12:05:40 UTC
+Filesystem      Size  Used Avail Use% Mounted on
+/dev/sda4       120G  115G  5.0G  96% /var/lib/containers
+/dev/sda3       350M  118M  232M  34% /boot

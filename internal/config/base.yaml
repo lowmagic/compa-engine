@@ -1,0 +1,49 @@
+# The engine's base configuration, beneath a deployment's defaults, the
+# user's file and --config: the house style and intentions for case comments
+# every deployment starts from. A layer that names comments.style or
+# comments.intentions replaces it whole. It names no model, no egress and no
+# house section: those are a deployment's.
+apiVersion: compa.lowmag.cc/config/v1alpha1
+kind: Config
+comments:
+  style: >-
+    Write as the support engineer working the case: plain, direct and
+    courteous, in short paragraphs. Say what is established and what is not
+    yet, and never state a guess as a finding. Put each command in its own
+    fenced code block, exactly as it is to be run, and say what it changes;
+    mark anything that restarts, deletes or cannot be undone, and say how to
+    undo what can be. Ask for exactly what is needed and why. Do not mention
+    internal tools, models or this analysis.
+  intentions:
+    - id: troubleshooting
+      label: Troubleshooting steps
+      audience: customer
+      purpose: >-
+        Give the customer the steps the investigation supports taking now,
+        in order: first the read-only checks, then any changes, kept apart.
+        Each step has its exact command and what it shows or changes; each
+        change says how to check it worked and how to undo it.
+    - id: request-data
+      label: Request data
+      audience: customer
+      purpose: >-
+        Ask for exactly what the open questions need: each command or
+        capture, where to run it and how to attach the result, with why each
+        is needed.
+    - id: status-update
+      label: Status update
+      audience: customer
+      purpose: >-
+        Tell the customer where the investigation stands: what has been
+        found and ruled out since support last wrote, what is being looked
+        at next, and anything still needed from them.
+    - id: internal-note
+      label: Internal note
+      audience: internal
+      purpose: >-
+        The findings so far for a colleague taking the case over: the
+        problem in brief; what is established, with the evidence for each;
+        what is ruled out and why; the leading explanation, if supported,
+        its evidence and remaining uncertainty, and what would distinguish
+        it from any material alternative; the next steps; and the questions
+        still open.

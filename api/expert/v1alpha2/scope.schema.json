@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://compa.lowmag.cc/expert/scope/v1alpha2",
+  "title": "Optional expert routing scope",
+  "type": "object",
+  "required": ["expert", "scope"],
+  "additionalProperties": false,
+  "properties": {
+    "expert": {"$ref": "https://compa.lowmag.cc/expert/manifest/v1alpha2#/$defs/dottedId"},
+    "scope": {"type": "object", "required": ["statement"], "additionalProperties": false,
+      "properties": {"key": {"type": ["string", "null"]}, "statement": {"$ref": "#/$defs/text"}, "source": {"type": "string"}}},
+    "retains": {"type": "array", "maxItems": 100, "items": {"type": "object", "required": ["text"], "additionalProperties": false,
+      "properties": {"text": {"$ref": "#/$defs/text"}, "source": {"type": "string"}}}},
+    "boundaries": {"type": "array", "maxItems": 100, "items": {"type": "object", "required": ["when"], "additionalProperties": false,
+      "properties": {"key": {"type": ["string", "null"]}, "name": {"type": "string"}, "when": {"$ref": "#/$defs/text"}, "source": {"type": "string"}},
+      "anyOf": [{"required": ["key"], "properties": {"key": {"type": "string", "minLength": 1}}}, {"required": ["name"], "properties": {"name": {"minLength": 1}}}]}}
+  },
+  "$defs": {"text": {"type": "string", "minLength": 1, "maxLength": 8000}}
+}

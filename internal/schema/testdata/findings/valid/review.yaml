@@ -1,0 +1,12 @@
+# Synthetic findings of the reviewer on an invented draft, in the review's
+# form.
+findings:
+  - statement: s1
+    kind: certainty
+    quote: were caused by root filesystem exhaustion
+    why: e7:4 shows ENOSPC on /var only.
+    evidence: ["e7:4"]
+    suggested: the mount failures coincide with ENOSPC on /var; the evidence does not establish the cause
+    alternative: disk pressure on /var alone, the root filesystem never full
+    discriminator: df of / at the time, not given
+supported: [s2]

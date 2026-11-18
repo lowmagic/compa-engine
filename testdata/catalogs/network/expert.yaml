@@ -1,0 +1,10 @@
+apiVersion: compa.lowmag.cc/expert/v1alpha3
+kind: Expert
+metadata: {id: fixture.network, version: 0.1.0, title: Network (fixture), summary: 'Host network transport, read with the core catalog''s tools (fixture)'}
+spec:
+  engineApi: '>=0.2.0 <0.3.0'
+  analyst: analyst.md
+  catalogs:
+    - id: fixture.core
+      version: '>=0.2.0 <0.3.0'
+      tools: [node_ready, pods]

@@ -1,0 +1,36 @@
+nothing: no model calls
+  compact: 
+  0 invocations
+all priced: 82,000 tokens ($0.41)
+  compact: 82.0k tok · $0.41
+  1 invocation
+  i1: usage reported; input 80,000 · cache read 1,000 · cache write 0 · output 1,000 · reasoning 0
+priced and unpriced: 82,000 tokens ($0.41), 15,000 tokens (unpriced)
+  compact: 82.0k tok · $0.41 + 15.0k tok unpriced
+  2 invocations; a floor: 1 without reasoning_tokens
+  i1: usage reported; input 80,000 · cache read 1,000 · cache write 0 · output 1,000 · reasoning 0
+  i2: usage reported, reasoning_tokens unavailable; input 14,000 · cache read 0 · cache write 0 · output 1,000 · reasoning unknown
+estimated apart from reported: 82,000 tokens ($0.41), 82,000 tokens ($0.0208 estimated)
+  compact: 82.0k tok · $0.41 + 82.0k tok · $0.0208 est
+  2 invocations
+  i1: usage reported; input 80,000 · cache read 1,000 · cache write 0 · output 1,000 · reasoning 0
+  i2: usage reported; input 80,000 · cache read 1,000 · cache write 0 · output 1,000 · reasoning 0
+nothing priced: 15,000 tokens
+  compact: 15.0k tok
+  1 invocation; a floor: 1 without reasoning_tokens
+  i1: usage reported, reasoning_tokens unavailable; input 14,000 · cache read 0 · cache write 0 · output 1,000 · reasoning unknown
+currencies apart: 164,000 tokens (0.0500 EUR + $1.50)
+  compact: 164.0k tok · 0.0500 EUR + $1.50
+  2 invocations; mixes harnesses gemini-cli, relay; mixes models vertex-gemini/claude-haiku-4-5, vertex-gemini/gemini-3.8-flash
+  i1: usage reported; input 80,000 · cache read 1,000 · cache write 0 · output 1,000 · reasoning 0
+  i2: usage reported; input 80,000 · cache read 1,000 · cache write 0 · output 1,000 · reasoning 0
+estimated counts and unknowns: 15,000 tokens
+  compact: 15.0k tok
+  3 invocations; a floor: 1 without input_tokens, 1 without cache_read_tokens, 1 without cache_write_tokens, 1 without output_tokens, 3 without reasoning_tokens; estimated apart: 1,200 input_tokens, 300 output_tokens; mixes harnesses pi, relay
+  i1: usage reported, reasoning_tokens unavailable; input 14,000 · cache read 0 · cache write 0 · output 1,000 · reasoning unknown
+  i2: usage estimated (chars-4), reasoning_tokens unavailable; input ~1,200 · cache read ~0 · cache write ~0 · output ~300 · reasoning unknown
+  i3: usage unavailable; input unknown · cache read unknown · cache write unknown · output unknown · reasoning unknown
+nothing measured: tokens unknown
+  compact: tokens unknown
+  1 invocation; a floor: 1 without input_tokens, 1 without cache_read_tokens, 1 without cache_write_tokens, 1 without output_tokens, 1 without reasoning_tokens
+  i1: usage unavailable; input unknown · cache read unknown · cache write unknown · output unknown · reasoning unknown

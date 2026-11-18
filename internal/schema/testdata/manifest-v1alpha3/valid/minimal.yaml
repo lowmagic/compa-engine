@@ -1,0 +1,4 @@
+apiVersion: compa.lowmag.cc/expert/v1alpha3
+kind: Expert
+metadata: {id: openshift.platform, version: 0.2.0, summary: 'A manifest for the schema''s tests'}
+spec: {engineApi: '>=0.2.0 <0.3.0', analyst: analyst.md}

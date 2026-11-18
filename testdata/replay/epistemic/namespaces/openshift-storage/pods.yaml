@@ -1,0 +1,11 @@
+# Synthetic fixture for the epistemic checks' tests: invented, nothing from a customer.
+items:
+  - metadata: {name: rook-ceph-mon-a-5c6d7}
+    spec: {nodeName: worker-2}
+    status: {phase: Running}
+  - metadata: {name: rook-ceph-mon-b-8f9a0}
+    spec: {nodeName: worker-3}
+    status: {phase: Running}
+  - metadata: {name: rook-ceph-mon-c-1b2c3}
+    spec: {nodeName: worker-4}
+    status: {phase: Running}

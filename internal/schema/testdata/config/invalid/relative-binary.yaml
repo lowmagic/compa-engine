@@ -1,0 +1,6 @@
+# want: /collection/allowlist/omc/path
+apiVersion: compa.lowmag.cc/config/v1alpha1
+kind: Config
+collection:
+  allowlist:
+    omc: {path: bin/omc}

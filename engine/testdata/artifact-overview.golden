@@ -1,0 +1,9 @@
+artifacts of case 00000001 from local directory: 2 attachments
+
+attachment: README.md
+state: present
+size: 149 bytes
+file: README.md
+
+attachment: must-gather
+state: present

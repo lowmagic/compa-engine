@@ -1,0 +1,36 @@
+id: "00000001"
+sourceId: rec-00000001
+subject: Pods on two workers cannot reach cluster DNS after upgrade
+description: |
+  After upgrading the cluster, pods scheduled on worker-1 and worker-2 time
+  out resolving service names. A must-gather is attached.
+status: Waiting on Support
+waitingOnSupport: true
+severity: 2 (High)
+product: OpenShift Container Platform
+productVersion: "4.16"
+clusterId: 00000000-0000-4000-8000-000000000001
+clusterVersion: 4.16.3
+routingKeys: [openshift-networking]
+# The account number is synthetic, as everything here is.
+account: {id: acct-1, name: Example Account, number: "1000000001"}
+owner: {id: user-1, name: support-engineer}
+created: 2026-10-01T09:00:00Z
+updated: 2026-10-02T14:30:00Z
+comments:
+  - id: c3
+    author: {id: user-1, name: support-engineer}
+    visibility: private
+    created: 2026-10-02T14:30:00Z
+    body: Requested a fresh must-gather; DNS operator looks healthy so far.
+  - id: c1
+    author: {id: user-2, name: customer}
+    visibility: public
+    created: 2026-10-01T09:00:00Z
+    body: Started right after the upgrade finished. Only two workers affected.
+  - id: c2
+    author: {id: user-2, name: customer}
+    visibility: public
+    created: 2026-10-01T09:00:00Z
+    updated: 2026-10-01T09:05:00Z
+    body: must-gather attached.

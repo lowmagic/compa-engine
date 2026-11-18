@@ -1,0 +1,8 @@
+apiVersion: compa.lowmag.cc/expert/v1alpha3
+kind: Expert
+metadata: {id: check.primitive, version: 0.1.0, title: Check fixture, summary: 'A package for compa expert check''s tests'}
+spec:
+  engineApi: '>=0.2.0 <0.3.0'
+  analyst: analyst.md
+  binaries: [omc]
+  tests: [check.primitive.one]

@@ -1,0 +1,48 @@
+{
+  "ev-c1": [
+    {
+      "kind": "repeated",
+      "from": 2,
+      "to": 6,
+      "comments": [
+        "ev-c0"
+      ],
+      "count": 3
+    }
+  ],
+  "ev-c2": [
+    {
+      "kind": "repeat",
+      "from": 0,
+      "to": 7,
+      "comments": [
+        "ev-c1"
+      ]
+    }
+  ],
+  "ev-c3": [
+    {
+      "kind": "quoted",
+      "from": 2,
+      "to": 7,
+      "comments": [
+        "ev-c1",
+        "ev-c2"
+      ]
+    }
+  ],
+  "ev-c4": [
+    {
+      "kind": "log",
+      "from": 16,
+      "to": 86
+    }
+  ],
+  "ev-c5": [
+    {
+      "kind": "quoted",
+      "from": 1,
+      "to": 3
+    }
+  ]
+}

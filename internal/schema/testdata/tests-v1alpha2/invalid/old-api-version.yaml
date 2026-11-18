@@ -1,0 +1,4 @@
+# want: /apiVersion
+apiVersion: compa.lowmag.cc/expert/v1alpha1
+kind: Tests
+tests: [{id: a.b, version: 0.1.0, run: [[omc]]}]

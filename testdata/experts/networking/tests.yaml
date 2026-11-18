@@ -1,0 +1,25 @@
+apiVersion: compa.lowmag.cc/expert/v1alpha2
+kind: Tests
+tests:
+  - id: networking.ovn_pods
+    version: 0.1.0
+    description: OVN-Kubernetes pod phases and restart counts.
+    params:
+      namespace: {type: string, default: openshift-ovn-kubernetes, pattern: '^[a-z0-9-]+$'}
+    run:
+      - [omc, get, pods, -n, '{{namespace}}', -o, json]
+      - jq: '.items[] | {name: .metadata.name, phase: .status.phase, restarts: [.status.containerStatuses[]?.restartCount]}'
+    output: {format: json}
+    interpret: analyst.md#ovn-pods
+    fixtures: fixtures/ovn-pods
+  - id: networking.ovn_errors
+    version: 0.1.0
+    description: Error lines in OVN-Kubernetes pod logs, counted.
+    params:
+      max: {type: integer, default: 200, minimum: 1, maximum: 1000}
+    preconditions: [{exists: namespaces/openshift-ovn-kubernetes}]
+    run:
+      - grep: {pattern: '(?i)error', path: namespaces/openshift-ovn-kubernetes, glob: '*.log', max_matches: '{{max}}'}
+      - logs.count: {}
+    output: {format: json}
+    interpret: analyst.md#ovn-errors

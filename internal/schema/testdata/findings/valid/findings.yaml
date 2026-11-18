@@ -1,0 +1,13 @@
+# Synthetic findings of the editor on an invented answer.
+findings:
+  - statement: s2
+    kind: listing_as_state
+    quote: three MONs ran on worker-1
+    why: e7 is a find listing of log files, not where the daemons run.
+    evidence: [e7, "e7:2-4"]
+    suggested: worker-1 holds MON log files.
+supported: [s1, s3]
+skipped:
+  - {statement: s4, why: procedure}
+corrected: "- worker-1 holds MON log files [e7:2-4]."
+notes: [Synthetic.]

@@ -1,0 +1,24 @@
+# Fixture routing library for routing tests. Synthetic; the production library
+# lives with the experts.
+apiVersion: compa.lowmag.cc/routing/v1alpha1
+kind: RoutingLibrary
+revision: fixture-1
+keys:
+  - id: openshift
+    name: OpenShift
+    aliases: [OpenShift, OCP]
+    components: [machine-config-operator, kubelet]
+    tags: [openshift]
+    experts:
+      - {id: openshift.platform, relationship: primary, provenance: [{source: fixture}]}
+    provenance: [{source: fixture}]
+  - id: openshift-networking
+    name: OpenShift Networking
+    aliases: [OpenShift Networking]
+    components: [ovn-kubernetes, coredns]
+    tags: [openshift, networking]
+    experts:
+      - {id: openshift.networking, relationship: primary}
+  - id: openshift-storage
+    name: OpenShift Storage
+    components: [csi-driver]

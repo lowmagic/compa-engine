@@ -1,0 +1,6 @@
+# want: /reasoning
+apiVersion: compa.lowmag.cc/config/v1alpha1
+kind: Config
+reasoning:
+  tasks:
+    analysis.diagnose: {profile: companion}

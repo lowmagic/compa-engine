@@ -1,0 +1,9 @@
+# want: problems
+schema: compa.lowmag.cc/expert/check/v1alpha2
+engine_api: 0.1.1
+roots: [experts]
+packages: []
+failed: [{dir: experts/broken, problems: []}]
+errors: []
+warnings: []
+totals: {packages: 0, errors: 1, warnings: 0, cases: 0}

@@ -1,0 +1,10 @@
+id: "00000002"
+subject: Cluster upgrade stalled at 84%
+status: New
+waitingOnSupport: true
+severity: 3 (Normal)
+product: OpenShift Container Platform
+productVersion: "4.15"
+routingKeys: [openshift]
+created: 2026-10-03T08:00:00Z
+updated: 2026-10-03T08:00:00Z

@@ -1,0 +1,195 @@
+{
+  "turns": [
+    {
+      "when": "The operator restarted ovnkube-identity",
+      "answers": [
+        {
+          "calls": [
+            {
+              "name": "check_findings",
+              "args": {
+                "findings": [
+                  {
+                    "statement": "s1",
+                    "kind": "misattributed",
+                    "quote": "The operator restarted ovnkube-identity",
+                    "why": "who saw the restart is not in the lines given",
+                    "suggested": "name who said it, or mark it inferred",
+                    "anchor": true
+                  }
+                ],
+                "supported": []
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "when": "The operator restarted ovnkube-control",
+      "answers": [
+        {
+          "calls": [
+            {
+              "name": "check_findings",
+              "args": {
+                "findings": [
+                  {
+                    "statement": "s1",
+                    "kind": "misattributed",
+                    "quote": "The operator restarted ovnkube-control",
+                    "why": "who saw the restart is not in the lines given",
+                    "suggested": "name who said it, or mark it inferred",
+                    "anchor": true
+                  }
+                ],
+                "supported": []
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "when": "The operator restarted ovnkube-master",
+      "answers": [
+        {
+          "calls": [
+            {
+              "name": "check_findings",
+              "args": {
+                "findings": [
+                  {
+                    "statement": "s1",
+                    "kind": "misattributed",
+                    "quote": "The operator restarted ovnkube-master",
+                    "why": "who saw the restart is not in the lines given",
+                    "suggested": "name who said it, or mark it inferred",
+                    "anchor": true
+                  }
+                ],
+                "supported": []
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "when": "The upgrade confirms that the OVN controller failures",
+      "answers": [
+        {
+          "calls": [
+            {
+              "name": "check_findings",
+              "args": {
+                "findings": [
+                  {
+                    "statement": "s1",
+                    "kind": "certainty",
+                    "quote": "confirms that the OVN controller failures were caused by worker-1",
+                    "why": "e1:2 says the controller cannot sync, not what caused it",
+                    "evidence": [
+                      "e1:2"
+                    ],
+                    "suggested": "the OVN controller failures began after the upgrade"
+                  }
+                ],
+                "supported": [
+                  "s2"
+                ],
+                "corrected": "The OVN controller failures began after the upgrade, on worker-1 [e1:2]. The OVN controller cannot sync worker-1 [e1:2]."
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "when": "The operator restarted ovnkube-node",
+      "answers": [
+        {
+          "calls": [
+            {
+              "name": "check_findings",
+              "args": {
+                "findings": [
+                  {
+                    "statement": "s1",
+                    "kind": "misattributed",
+                    "quote": "The operator restarted ovnkube-node",
+                    "why": "who saw the restart is not in the lines given",
+                    "suggested": "name who said it, or mark it inferred",
+                    "anchor": true
+                  }
+                ],
+                "supported": []
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "when": "logs nothing new",
+      "answers": []
+    },
+    {
+      "when": "The operator restarted ovnkube-pods",
+      "answers": [
+        {
+          "calls": [
+            {
+              "name": "check_findings",
+              "args": {
+                "findings": [
+                  {
+                    "statement": "s1",
+                    "kind": "unsupported",
+                    "quote": "logged `no such marker 7f3a`",
+                    "why": "no line given holds it",
+                    "suggested": "the controller logged errors"
+                  },
+                  {
+                    "statement": "s2",
+                    "kind": "misattributed",
+                    "quote": "The operator restarted ovnkube-pods",
+                    "why": "who saw the restart is not in the lines given",
+                    "suggested": "name who said it, or mark it inferred",
+                    "anchor": true
+                  }
+                ],
+                "supported": []
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "when": "the investigation confirms the OVN controller",
+      "answers": [
+        {
+          "calls": [
+            {
+              "name": "check_findings",
+              "args": {
+                "findings": [
+                  {
+                    "statement": "s1",
+                    "kind": "certainty",
+                    "quote": "the investigation confirms the OVN controller on worker-1 cannot sync",
+                    "why": "e1:2 states it; the investigation confirms nothing",
+                    "suggested": "the OVN controller on worker-1 cannot sync"
+                  }
+                ],
+                "supported": [],
+                "corrected": "Hello, the OVN controller on worker-1 cannot sync; we are reading its logs."
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

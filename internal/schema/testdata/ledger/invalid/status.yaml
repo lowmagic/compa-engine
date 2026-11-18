@@ -1,0 +1,4 @@
+# want: value must be one of
+items:
+  - {kind: reports, who: customer, text: It started after the upgrade., comment: e3, status: closed}
+updates: []

@@ -1,0 +1,15 @@
+# Synthetic fixture for the epistemic checks' tests: invented, nothing from a customer.
+apiVersion: config.openshift.io/v1
+kind: Proxy
+metadata:
+  name: cluster
+spec:
+  httpProxy: http://proxy.example.internal:3128
+  httpsProxy: http://proxy.example.internal:3128
+  noProxy: .cluster.local,.svc,10.128.0.0/14,172.30.0.0/16,api-int.example.internal
+  trustedCA:
+    name: ""
+status:
+  httpProxy: http://proxy.example.internal:3128
+  httpsProxy: http://proxy.example.internal:3128
+  noProxy: .cluster.local,.svc,10.128.0.0/14,127.0.0.1,172.30.0.0/16,api-int.example.internal,localhost

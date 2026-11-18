@@ -1,0 +1,17 @@
+# Synthetic findings of the editor on an invented answer: a certainty it
+# corrected, and an anchor left to the revision.
+findings:
+  - statement: s1
+    kind: certainty
+    quote: confirms that the mount failed because /var filled
+    why: e7:4 shows ENOSPC on /var and says nothing of the cause.
+    evidence: ["e7:4"]
+    suggested: the mount failures coincide with ENOSPC on /var
+  - statement: s2
+    kind: unsupported
+    quote: fired with a 300 s threshold
+    why: no line given holds the alert rule.
+    suggested: cite the lines that hold the rule, or say no evidence holds it
+    anchor: true
+supported: []
+corrected: "The mount failures coincide with ENOSPC on /var [e7:4]. The alert fired with a 300 s threshold."

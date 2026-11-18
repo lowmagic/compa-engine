@@ -1,0 +1,12 @@
+apiVersion: compa.lowmag.cc/routing/v1alpha1
+kind: RoutingLibrary
+revision: fixture-1
+keys:
+  - id: openshift
+    name: OpenShift
+    aliases: [OpenShift, ocp]
+    components: [machine-config-operator]
+    tags: [openshift]
+    experts: [{id: openshift.platform, relationship: primary, provenance: [{source: example-source, ref: example-ref}]}]
+    provenance: [{source: case system metadata, ref: routing-field}]
+  - id: openshift-networking

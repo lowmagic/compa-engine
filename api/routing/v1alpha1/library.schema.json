@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://compa.lowmag.cc/routing/library/v1alpha1",
+  "title": "Routing library",
+  "description": "Canonical routing keys with their aliases, components and tags, their relationships to experts and the provenance of each. Maintained with the experts.",
+  "type": "object",
+  "required": ["apiVersion", "kind", "revision", "keys"],
+  "additionalProperties": false,
+  "properties": {
+    "apiVersion": {"const": "compa.lowmag.cc/routing/v1alpha1"},
+    "kind": {"const": "RoutingLibrary"},
+    "revision": {"type": "string", "minLength": 1, "maxLength": 128},
+    "keys": {"type": "array", "items": {"$ref": "#/$defs/key"}}
+  },
+  "$defs": {
+    "provenance": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["source"],
+        "additionalProperties": false,
+        "properties": {
+          "source": {"type": "string", "minLength": 1},
+          "ref": {"type": "string"}
+        }
+      }
+    },
+    "names": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1, "maxLength": 200}},
+    "key": {
+      "type": "object",
+      "required": ["id"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {"$ref": "https://compa.lowmag.cc/expert/manifest/v1alpha2#/$defs/routingKey"},
+        "name": {"type": "string"},
+        "aliases": {"$ref": "#/$defs/names"},
+        "components": {"$ref": "#/$defs/names"},
+        "tags": {"$ref": "#/$defs/names"},
+        "experts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id"],
+            "additionalProperties": false,
+            "properties": {
+              "id": {"$ref": "https://compa.lowmag.cc/expert/manifest/v1alpha2#/$defs/dottedId"},
+              "relationship": {"enum": ["primary", "secondary"]},
+              "provenance": {"$ref": "#/$defs/provenance"}
+            }
+          }
+        },
+        "provenance": {"$ref": "#/$defs/provenance"}
+      }
+    }
+  }
+}

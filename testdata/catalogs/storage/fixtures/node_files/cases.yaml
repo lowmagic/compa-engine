@@ -1,0 +1,13 @@
+# Synthetic, written for the engine's own tests: what the tool returns over
+# its fixtures directory, which holds no capture. Written by compa expert
+# check --update.
+apiVersion: compa.lowmag.cc/expert/v1alpha2
+kind: Cases
+tool: storage.node_files
+root: .
+modified: 2026-01-01T00:00:00Z
+cases:
+  - name: no nodes captured
+    status: failed
+    reason: 'stage 0: statat cluster-scoped-resources/core/nodes: no such file or directory'
+    output: ''

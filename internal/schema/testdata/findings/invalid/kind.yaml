@@ -1,0 +1,4 @@
+# want: value must be one of
+findings:
+  - {statement: s1, kind: wrong, quote: x, why: y}
+supported: []

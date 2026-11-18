@@ -1,0 +1,7 @@
+# want: modified
+apiVersion: compa.lowmag.cc/expert/v1alpha2
+kind: Cases
+tool: fixture.files.ls
+root: ../root
+cases:
+  - {name: the root, status: ok, output: ''}

@@ -1,0 +1,5 @@
+# want: /keys/0/experts/0/relationship
+apiVersion: compa.lowmag.cc/routing/v1alpha1
+kind: RoutingLibrary
+revision: fixture-1
+keys: [{id: openshift, experts: [{id: openshift.platform, relationship: owner}]}]

@@ -1,0 +1,10 @@
+# Synthetic: a ledger update reading three comments.
+items:
+  - {kind: asks, who: support, text: Send a fresh must-gather., comment: e4, status: open}
+  - {kind: provides, who: customer, text: A must-gather of the cluster., comment: e5, attachment: must-gather.tar.gz, status: superseded, because: e6}
+  - {kind: commits, who: customer, text: Will upgrade the cluster., comment: e6, due: Friday, status: pending}
+updates:
+  - {item: l2, status: answered, because: e5}
+  - {item: l3, status: withdrawn, because: e6, note: The edit no longer says it.}
+none:
+  - {comment: e7, why: courtesy}

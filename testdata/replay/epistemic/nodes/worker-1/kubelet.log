@@ -1,0 +1,6 @@
+# Synthetic fixture for the epistemic checks' tests: invented, nothing from a customer.
+Oct 20 08:10:02 worker-1 kubelet[2211]: I1020 08:10:02.118 eviction_manager.go:366] "Eviction manager: attempting to reclaim" resourceName="ephemeral-storage"
+Oct 20 08:10:02 worker-1 kubelet[2211]: I1020 08:10:02.119 eviction_manager.go:377] "Eviction manager: must evict pod(s) to reclaim" resourceName="ephemeral-storage"
+Oct 20 08:10:02 worker-1 kubelet[2211]: I1020 08:10:02.120 eviction_manager.go:395] "Eviction manager: pods ranked for eviction" pods=["openshift-storage/csi-rbdplugin-k2x9p","app-demo/web-6f7c9"]
+Oct 20 08:12:40 worker-1 kubelet[2211]: E1020 08:12:40.502 csi_attacher.go:1022] "rpc error: code = Unavailable desc = transport: Error while dialing: dial unix /var/lib/kubelet/plugins/rbd.csi.ceph.com/csi.sock: connect: connection refused"	  
+Oct 20 08:14:11 worker-1 kubelet[2211]: I1020 08:14:11.003 kubelet.go:2419] "SyncLoop UPDATE" source="api" pods=["openshift-storage/rook-ceph-osd-3-7d9f8"]

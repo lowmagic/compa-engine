@@ -1,0 +1,363 @@
+# Synthetic, as everything here is: written for this fixture, from no case.
+id: "00000004"
+sourceId: rec-00000004
+subject: Log collector pods restart after the cluster upgrade
+description: |
+  Since the upgrade the log collector pods on three workers restart every few minutes.
+  Application logs from those workers are missing in the log store for the same periods.
+  We need help finding why the collectors restart and whether the missing logs can be recovered.
+status: Waiting on Support
+severity: 2 (High)
+product: OpenShift Container Platform
+productVersion: "4.16"
+owner: {id: user-1, name: support-engineer}
+created: 2026-10-01T09:00:00Z
+updated: 2027-01-10T09:55:32Z
+comments:
+  - id: c1
+    author: {id: user-1, name: support-engineer}
+    authorKind: support
+    automated: false
+    visibility: public
+    created: 2026-10-01T09:00:00Z
+    synthetic: true
+    body: |
+      Hello,
+
+      Thank you for opening this case. I am support-engineer from the platform team and I will be working with you on the collector restarts you describe until we have an answer for them.
+
+      Could you attach a must-gather of the logging namespace and tell us when the first restart was seen?
+
+      Regards,
+      support-engineer.
+  - id: c2
+    author: {id: user-2, name: A. Customer}
+    authorKind: customer
+    automated: false
+    visibility: public
+    created: 2026-10-01T10:02:21Z
+    synthetic: true
+    body: |
+      Example Corp | General Use
+      Hello,
+
+      The first restart was about ten minutes after the upgrade finished. The must-gather is attached.
+
+      Regards,
+      A. Customer
+      Platform Operations
+      Tel: +1-555-0100
+
+      -----Original Message-----
+      From: Support
+      Sent: Thursday, October 1, 2026 9:00 AM
+      To: A. Customer
+      Subject: Re: Log collector pods restart after the cluster upgrade
+
+      > Could you attach a must-gather of the logging namespace and tell us when the first restart was seen?
+
+      This message and its attachments are for the named recipient only. If you received it in error, tell the sender and delete it. Views in it are the author's and not necessarily those of Example Corp.
+
+      For more about Example Corp, visit https://example.com.
+  - id: c3
+    author: {id: user-1, name: support-engineer}
+    authorKind: support
+    automated: false
+    visibility: public
+    created: 2026-10-01T13:34:51Z
+    synthetic: true
+    body: |
+      Hello,
+
+      Thank you. The must-gather shows the collector containers on worker-3, worker-4 and worker-5 ending with exit code 137.
+
+      Could you also attach a sosreport from worker-3, taken while a collector there is restarting?
+
+      Regards,
+      support-engineer.
+  - id: c4
+    author: {id: user-2, name: A. Customer}
+    authorKind: customer
+    automated: false
+    visibility: public
+    created: 2026-10-01T14:00:00Z
+    synthetic: true
+    body: |
+      The sosreport from worker-3 is attached.
+
+      Regards,
+      A. Customer
+  - id: c5
+    author: {id: user-4, name: Support Bot}
+    authorKind: support
+    automated: true
+    visibility: private
+    created: 2026-10-01T14:05:00Z
+    synthetic: true
+    body: |
+      Support Bot automated notification:
+
+      Diagnostic archives 0010-must-gather.local.1.tgz and 0020-sosreport-node1-2026-10-01.tar.xz received and verified.
+  - id: c6
+    author: {id: user-2, name: A. Customer}
+    authorKind: customer
+    automated: false
+    visibility: public
+    created: 2026-10-01T14:30:00Z
+    synthetic: true
+    body: |
+      Here is what one collector logs before it stops:
+
+      2026-10-01T14:10:13Z collector[4100]: buffer for output default at 49% of its limit, 7 chunks queued
+      2026-10-01T14:10:26Z collector[4100]: buffer for output default at 50% of its limit, 14 chunks queued
+      2026-10-01T14:10:39Z collector[4100]: buffer for output default at 51% of its limit, 21 chunks queued
+      2026-10-01T14:11:52Z collector[4100]: buffer for output default at 52% of its limit, 28 chunks queued
+      2026-10-01T14:11:05Z collector[4100]: buffer for output default at 53% of its limit, 35 chunks queued
+      2026-10-01T14:11:18Z collector[4100]: buffer for output default at 54% of its limit, 42 chunks queued
+      2026-10-01T14:11:31Z collector[4100]: buffer for output default at 55% of its limit, 49 chunks queued
+      2026-10-01T14:12:44Z collector[4100]: buffer for output default at 56% of its limit, 56 chunks queued
+      2026-10-01T14:12:57Z collector[4100]: buffer for output default at 57% of its limit, 63 chunks queued
+      2026-10-01T14:12:10Z collector[4100]: buffer for output default at 58% of its limit, 70 chunks queued
+      2026-10-01T14:12:23Z collector[4100]: buffer for output default at 59% of its limit, 77 chunks queued
+      2026-10-01T14:13:36Z collector[4100]: buffer for output default at 60% of its limit, 84 chunks queued
+      2026-10-01T14:13:49Z collector[4100]: buffer for output default at 61% of its limit, 91 chunks queued
+      2026-10-01T14:13:02Z collector[4100]: buffer for output default at 62% of its limit, 98 chunks queued
+      2026-10-01T14:13:15Z collector[4100]: buffer for output default at 63% of its limit, 105 chunks queued
+      2026-10-01T14:14:28Z collector[4100]: buffer for output default at 64% of its limit, 112 chunks queued
+      2026-10-01T14:14:41Z collector[4100]: buffer for output default at 65% of its limit, 119 chunks queued
+      2026-10-01T14:14:54Z collector[4100]: buffer for output default at 66% of its limit, 126 chunks queued
+      2026-10-01T14:14:07Z collector[4100]: buffer for output default at 67% of its limit, 133 chunks queued
+      2026-10-01T14:15:20Z collector[4100]: buffer for output default at 68% of its limit, 140 chunks queued
+      2026-10-01T14:15:33Z collector[4100]: buffer for output default at 69% of its limit, 147 chunks queued
+      2026-10-01T14:15:46Z collector[4100]: buffer for output default at 70% of its limit, 154 chunks queued
+      2026-10-01T14:15:59Z collector[4100]: buffer for output default at 71% of its limit, 161 chunks queued
+      2026-10-01T14:16:12Z collector[4100]: buffer for output default at 72% of its limit, 168 chunks queued
+      2026-10-01T14:16:25Z collector[4100]: buffer for output default at 73% of its limit, 175 chunks queued
+      2026-10-01T14:16:38Z collector[4100]: buffer for output default at 74% of its limit, 182 chunks queued
+      2026-10-01T14:16:51Z collector[4100]: buffer for output default at 75% of its limit, 189 chunks queued
+      2026-10-01T14:17:04Z collector[4100]: buffer for output default at 76% of its limit, 196 chunks queued
+      2026-10-01T14:17:17Z collector[4100]: buffer for output default at 77% of its limit, 203 chunks queued
+      2026-10-01T14:17:30Z collector[4100]: buffer for output default at 78% of its limit, 210 chunks queued
+      2026-10-01T14:17:43Z collector[4100]: buffer for output default at 79% of its limit, 217 chunks queued
+      2026-10-01T14:18:56Z collector[4100]: buffer for output default at 80% of its limit, 224 chunks queued
+      2026-10-01T14:18:09Z collector[4100]: buffer for output default at 81% of its limit, 231 chunks queued
+      2026-10-01T14:18:22Z collector[4100]: buffer for output default at 82% of its limit, 238 chunks queued
+      2026-10-01T14:18:35Z collector[4100]: buffer for output default at 83% of its limit, 245 chunks queued
+      2026-10-01T14:19:48Z collector[4100]: buffer for output default at 84% of its limit, 252 chunks queued
+      2026-10-01T14:19:01Z collector[4100]: buffer for output default at 85% of its limit, 259 chunks queued
+      2026-10-01T14:19:14Z collector[4100]: buffer for output default at 86% of its limit, 266 chunks queued
+      2026-10-01T14:19:27Z collector[4100]: buffer for output default at 87% of its limit, 273 chunks queued
+      2026-10-01T14:20:40Z collector[4100]: buffer for output default at 88% of its limit, 280 chunks queued
+      2026-10-01T14:20:53Z collector[4100]: buffer for output default at 89% of its limit, 287 chunks queued
+      2026-10-01T14:20:06Z collector[4100]: buffer for output default at 90% of its limit, 294 chunks queued
+      2026-10-01T14:20:19Z collector[4100]: buffer for output default at 91% of its limit, 301 chunks queued
+      2026-10-01T14:21:32Z collector[4100]: buffer for output default at 92% of its limit, 308 chunks queued
+      2026-10-01T14:21:45Z collector[4100]: buffer for output default at 93% of its limit, 315 chunks queued
+      2026-10-01T14:21:58Z collector[4100]: buffer for output default at 94% of its limit, 322 chunks queued
+      2026-10-01T14:21:11Z collector[4100]: buffer for output default at 95% of its limit, 329 chunks queued
+      2026-10-01T14:22:24Z collector[4100]: buffer for output default at 96% of its limit, 336 chunks queued
+      2026-10-01T14:22:37Z collector[4100]: buffer for output default at 97% of its limit, 343 chunks queued
+      2026-10-01T14:22:50Z collector[4100]: buffer for output default at 98% of its limit, 350 chunks queued
+  - id: c7
+    author: {id: user-3, name: Account Manager One}
+    authorKind: support
+    automated: false
+    visibility: public
+    created: 2026-10-02T08:48:45Z
+    synthetic: true
+    body: |
+      Hello,
+
+      I am the account manager for Example Corp and am following this case with the engineer.
+
+      > Could you also attach a sosreport from worker-3, taken while a collector there is restarting?
+
+      The sosreport is on the case since yesterday. Please confirm it was taken at the right time.
+
+      Regards,
+      Account Manager One
+  - id: c8
+    author: {id: user-2, name: A. Customer}
+    authorKind: customer
+    automated: false
+    visibility: public
+    created: 2026-10-02T09:07:02Z
+    synthetic: true
+    body: |
+      Example Corp | General Use
+      Hello,
+
+      It was taken at 14:20 UTC, during a restart on worker-3.
+
+      Regards,
+      A. Customer
+      Platform Operations
+      Tel: +1-555-0100
+
+      -----Original Message-----
+      From: Support
+      Sent: Friday, October 2, 2026 8:48 AM
+      To: A. Customer
+      Subject: Re: Log collector pods restart after the cluster upgrade
+
+      > The sosreport is on the case since yesterday. Please confirm it was taken at the right time.
+
+      This message and its attachments are for the named recipient only. If you received it in error, tell the sender and delete it. Views in it are the author's and not necessarily those of Example Corp.
+
+      For more about Example Corp, visit https://example.com.
+  - id: c9
+    author: {id: user-2, name: A. Customer}
+    authorKind: customer
+    automated: false
+    visibility: public
+    created: 2026-10-02T09:15:26Z
+    synthetic: true
+    body: |
+      Adding to that: we would also like to know whether the logs from the periods the collectors were down can be read from the nodes afterwards.
+  - id: c10
+    author: {id: user-3, name: Account Manager One}
+    authorKind: support
+    automated: false
+    visibility: public
+    created: 2026-10-02T12:31:26Z
+    synthetic: true
+    body: |
+      Hello,
+
+      Thank you. The engineer is reading the sosreport and will answer both questions.
+
+      Regards,
+      Account Manager One
+  - id: c11
+    author: {id: user-2, name: A. Customer}
+    authorKind: customer
+    automated: false
+    visibility: public
+    created: 2026-10-03T05:23:56Z
+    synthetic: true
+    body: |
+      Example Corp | General Use
+      Hello,
+
+      The restarts continue this morning on the same three workers. No other worker is affected.
+
+      Regards,
+      A. Customer
+      Platform Operations
+      Tel: +1-555-0100
+
+      -----Original Message-----
+      From: Support
+      Sent: Friday, October 2, 2026 12:31 PM
+      To: A. Customer
+      Subject: Re: Log collector pods restart after the cluster upgrade
+
+      > The engineer is reading the sosreport and will answer both questions.
+
+      This message and its attachments are for the named recipient only. If you received it in error, tell the sender and delete it. Views in it are the author's and not necessarily those of Example Corp.
+
+      For more about Example Corp, visit https://example.com.
+  - id: c12
+    author: {id: user-3, name: Account Manager One}
+    authorKind: support
+    automated: false
+    visibility: public
+    created: 2026-10-03T09:39:44Z
+    synthetic: true
+    body: |
+      Hello,
+
+      The sosreport shows the kernel ending the collector on worker-3 for exceeding its memory limit, and the three workers are the ones running the busiest application namespaces.
+
+      > The first restart was about ten minutes after the upgrade finished.
+      > It was taken at 14:20 UTC, during a restart on worker-3.
+
+      Both times agree with the kernel's messages. Could you tell us the collector's memory limit before and after the upgrade?
+
+      Regards,
+      Account Manager One
+  - id: c13
+    author: {id: user-2, name: A. Customer}
+    authorKind: customer
+    automated: false
+    visibility: public
+    created: 2026-10-04T05:18:59Z
+    synthetic: true
+    body: |
+      Example Corp | General Use
+      Hello,
+
+      The limit was 2Gi before the upgrade. After it the collector shows 736Mi, which we did not set.
+
+      Regards,
+      A. Customer
+      Platform Operations
+      Tel: +1-555-0100
+
+      -----Original Message-----
+      From: Support
+      Sent: Saturday, October 3, 2026 9:39 AM
+      To: A. Customer
+      Subject: Re: Log collector pods restart after the cluster upgrade
+
+      > Could you tell us the collector's memory limit before and after the upgrade?
+
+      This message and its attachments are for the named recipient only. If you received it in error, tell the sender and delete it. Views in it are the author's and not necessarily those of Example Corp.
+
+      For more about Example Corp, visit https://example.com.
+  - id: c14
+    author: {id: user-2, name: A. Customer}
+    authorKind: customer
+    automated: false
+    visibility: public
+    created: 2026-10-04T07:00:00Z
+    synthetic: true
+    body: |
+      We have set the limit back to 2Gi on the collector and the restarts have stopped on worker-4 and worker-5. worker-3 restarted once more an hour ago.
+  - id: c15
+    author: {id: user-3, name: Account Manager One}
+    authorKind: support
+    automated: false
+    visibility: public
+    created: 2026-10-04T08:00:00Z
+    synthetic: true
+    body: |
+      Hello,
+
+      Thank you for the update. Please keep the limit at 2Gi and tell us whether worker-3 restarts again in the next day.
+
+      Regards,
+      Account Manager One
+  - id: c16
+    author: {id: user-5, name: Escalation Manager}
+    authorKind: support
+    automated: false
+    visibility: private
+    created: 2026-12-04T08:51:36Z
+    synthetic: true
+    body: |
+      On a call for case 00000001 the customer said the restarts in case 00000004 came back on worker-3 after a second upgrade. Reopening for the engineer to check whether the limit was reset again.
+  - id: c17
+    author: {id: user-5, name: Escalation Manager}
+    authorKind: support
+    automated: false
+    visibility: private
+    created: 2026-12-06T07:38:58Z
+    updated: 2026-12-06T08:02:10Z
+    synthetic: true
+    body: |
+      The customer confirms the collector's limit is 736Mi again since the second upgrade. Asked the engineer to find what resets it.
+  - id: c18
+    author: {id: user-6, name: Account Manager Two}
+    authorKind: support
+    automated: false
+    visibility: public
+    created: 2027-01-10T09:55:32Z
+    synthetic: true
+    body: |
+      Hello,
+
+      I have taken over as account manager for Example Corp. The limit has held at 2Gi since it was set in the logging resource instead of on the collector. Is there anything else needed on this case?
+
+      Regards,
+      Account Manager Two

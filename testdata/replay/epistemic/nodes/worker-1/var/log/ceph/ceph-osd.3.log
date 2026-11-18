@@ -1,0 +1,4 @@
+# Synthetic fixture for the epistemic checks' tests: invented, nothing from a customer.
+2026-10-20T08:15:58.112+0000 7f2a osd.3 1204 heartbeat_check: no reply from osd.5
+2026-10-20T08:16:05.441+0000 7f2a osd.3 1205 *** Got signal Terminated ***
+2026-10-20T08:16:05.902+0000 7f2a osd.3 1205 prepare_to_stop starting shutdown

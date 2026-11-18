@@ -1,0 +1,8 @@
+schema: compa.lowmag.cc/expert/check/v1alpha2
+engine_api: 0.1.1
+roots: [experts]
+packages: []
+failed: []
+errors: ['expert root experts does not exist']
+warnings: []
+totals: {packages: 0, errors: 1, warnings: 0, cases: 0}

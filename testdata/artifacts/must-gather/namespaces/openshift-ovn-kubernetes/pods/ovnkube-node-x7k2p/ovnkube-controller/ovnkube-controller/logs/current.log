@@ -1,0 +1,8 @@
+2026-10-19T11:55:01.000000Z I1019 11:55:01.000000 1 ovnkube.go:100] Starting ovnkube-controller
+2026-10-19T11:57:30.123456Z E1019 11:57:30.123456 1 node.go:412] error syncing node worker-1: failed to get chassis 7f3a9c2e-1b4d-4e8a-9c3f-2d1e0b5a6c7d
+2026-10-19T11:57:31.223456Z E1019 11:57:31.223456 1 node.go:412] error syncing node worker-1: failed to get chassis 7f3a9c2e-1b4d-4e8a-9c3f-2d1e0b5a6c7d
+goroutine 412 [running]:
+main.sync()
+2026-10-19T11:58:02.000000Z I1019 11:58:02.000000 1 ovnkube.go:200] Node worker-1 ready check
+2026-10-19T11:59:45.987654Z E1019 11:59:45.987654 1 node.go:412] error syncing node worker-1: failed to get chassis 7f3a9c2e-1b4d-4e8a-9c3f-2d1e0b5a6c7d
+2026-10-19T12:01:00.000000Z W1019 12:01:00.000000 1 egress.go:88] egress IP 10.0.0.9 not assigned

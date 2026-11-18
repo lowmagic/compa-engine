@@ -1,0 +1,184 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://compa.lowmag.cc/config/config/v1alpha1",
+  "title": "Engine configuration",
+  "type": "object",
+  "required": ["apiVersion", "kind"],
+  "additionalProperties": false,
+  "properties": {
+    "apiVersion": {"const": "compa.lowmag.cc/config/v1alpha1"},
+    "kind": {"const": "Config"},
+    "companion": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "supportName": {"type": "string", "minLength": 1, "maxLength": 100, "pattern": "^[^\\r\\n]+$", "description": "The deployment's support-side display name. Default Support."},
+        "supportRole": {"type": "string", "minLength": 1, "maxLength": 100, "pattern": "^[^\\r\\n]+$", "description": "What a support author is called as a person, beside a comment. Default Support."},
+        "house": {"type": "string", "pattern": "\\S", "description": "Free text the system prompt carries as a section of its own, after the companion's method: who the support organization is, the deployment's knowledge sources and its tools' conventions. Appended as given, with no templating."}
+      }
+    },
+    "experts": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "bundled": {"type": "string", "minLength": 1},
+        "local": {"type": "array", "items": {"type": "string", "minLength": 1}},
+        "snapshots": {"type": "string", "minLength": 1}
+      }
+    },
+    "checks": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "The answer checks' settings.",
+      "properties": {
+        "commands": {
+          "description": "Programs, beside the engine's own general-purpose ones, whose command lines an answer gives for someone to run, such as a product's CLI: a code span opening with one and holding arguments is an instruction, not a claim, and is not looked for in the evidence. A later layer's list replaces this one.",
+          "type": "array",
+          "items": {"type": "string", "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.+-]*$"},
+          "uniqueItems": true
+        }
+      }
+    },
+    "routingLibrary": {"type": "string", "minLength": 1},
+    "comments": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "The intentions for drafting case comments and the house style: the engine's base layer gives a general set, and a layer naming either replaces it whole.",
+      "properties": {
+        "style": {"type": "string", "minLength": 1, "description": "The house style every draft is written in."},
+        "intentions": {"type": "array", "items": {
+          "type": "object",
+          "required": ["id", "label", "audience", "purpose"],
+          "additionalProperties": false,
+          "properties": {
+            "id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$"},
+            "label": {"type": "string", "minLength": 1},
+            "audience": {"enum": ["customer", "internal"]},
+            "purpose": {"type": "string", "minLength": 1}
+          }
+        }}
+      }
+    },
+    "storage": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "homeRetentionDays": {"type": "integer", "minimum": 1, "description": "How long a case stored under the engineer's home directory, for want of a case folder, is kept unused. Default 14."}
+      }
+    },
+    "collection": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "allowlist": {
+          "type": "object",
+          "patternProperties": {
+            "^[A-Za-z0-9_][A-Za-z0-9_.+-]*$": {
+              "type": "object",
+              "required": ["path"],
+              "additionalProperties": false,
+              "properties": {
+                "path": {"type": "string", "pattern": "^/"},
+                "deny": {"type": "array", "items": {"type": "string", "minLength": 1}},
+                "denyPatterns": {"type": "array", "items": {"type": "string", "minLength": 1}},
+                "replaceDefaultRules": {"type": "boolean"}
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        "exclude": {
+          "type": "array",
+          "items": {"type": "string", "minLength": 1, "pattern": "^[^/\\\\]+$"},
+          "uniqueItems": true
+        },
+        "limits": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "outputBytes": {"type": "integer", "minimum": 1},
+            "timeoutSeconds": {"type": "integer", "minimum": 1},
+            "maxTimeoutSeconds": {"type": "integer", "minimum": 1},
+            "maxFileBytes": {"type": "integer", "minimum": 1},
+            "maxLineBytes": {"type": "integer", "minimum": 1}
+          }
+        }
+      }
+    },
+    "reasoning": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "maxEgressClass": {"$ref": "#/$defs/egressClass"},
+        "vertex": {
+          "description": "Vertex AI settings for the vertex-gemini and vertex-anthropic providers, which use Application Default Credentials. An unset project falls back to GOOGLE_CLOUD_PROJECT or ANTHROPIC_VERTEX_PROJECT_ID, and an unset location to GOOGLE_CLOUD_LOCATION or CLOUD_ML_REGION, then global.",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "project": {"type": "string", "minLength": 1},
+            "location": {"type": "string", "minLength": 1},
+            "cacheMinutes": {"description": "How long an explicit Gemini cache of a request's stable prefix lives, in minutes; 10 when unset. Longer outlasts an engineer reading between calls, at Gemini's hourly storage charge, which the price table does not model.", "type": "integer", "minimum": 1, "maximum": 1440}
+          }
+        },
+        "openai": {
+          "description": "The OpenAI-compatible Chat Completions endpoint the openai provider calls, such as OpenRouter or a self-hosted inference server.",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "baseURL": {"description": "The endpoint, up to /chat/completions; https://openrouter.ai/api/v1 when unset.", "type": "string", "pattern": "^https?://"},
+            "apiKeyEnv": {"description": "The environment variable holding the endpoint's API key, sent as a bearer token; unset, no key is sent. The key itself is never configuration.", "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"},
+            "egressClass": {"description": "Where the endpoint's calls go, which selects their redaction policy and is held against maxEgressClass: external_provider when unset. Declare internal_network or local_only only for an endpoint the deployment runs: local_only redacts nothing.", "$ref": "#/$defs/egressClass"},
+            "cacheMarks": {"description": "Send the engine's cache breaks as Anthropic-style cache_control marks on message content, which OpenRouter passes to the models that take them. An endpoint that refuses the field must not set it.", "type": "boolean"}
+          }
+        },
+        "profiles": {
+          "description": "Each task class's model (the companion's conversation and consults are class companion, the case ledger's calls class ledger, the editor's check of each answer class editor, which runs only where a profile names it, and the reviewer's second opinion on request class reviewer, offered only where a profile names it), by its name under models, and the effort its calls send: required where the model takes efforts, and one it lists; absent where it takes none.",
+          "type": "object",
+          "patternProperties": {
+            "^[a-z][a-z0-9_]*$": {
+              "type": "object",
+              "required": ["model"],
+              "additionalProperties": false,
+              "properties": {
+                "model": {"type": "string", "pattern": "^[a-z0-9][a-z0-9.@_-]*$"},
+                "effort": {"$ref": "#/$defs/effort"}
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        "models": {
+          "description": "The models the profiles use, by name: each one's provider, its model ID there, and the efforts it takes, as checked live. A model listing none is sent none.",
+          "type": "object",
+          "patternProperties": {
+            "^[a-z0-9][a-z0-9.@_-]*$": {
+              "type": "object",
+              "required": ["provider", "model"],
+              "additionalProperties": false,
+              "properties": {
+                "provider": {"type": "string", "minLength": 1},
+                "model": {"type": "string", "minLength": 1},
+                "efforts": {"type": "array", "items": {"$ref": "#/$defs/effort"}, "uniqueItems": true}
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        "barredAccounts": {
+          "description": "The deployment's list of accounts barred from AI processing: no model call is made for a case whose account is on it, and a case that cannot be checked is refused until the engineer overrides it. Unset, the rule is off.",
+          "type": "object",
+          "required": ["list"],
+          "additionalProperties": false,
+          "properties": {
+            "list": {"description": "The file: one account number a line, blank lines and # comments ignored.", "type": "string", "minLength": 1},
+            "overrideInstructions": {"description": "Shown to the engineer before an override of a check that could not be made.", "type": "string"}
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "egressClass": {"description": "How far a call's request may travel: the host alone, the deployment's network, or an external provider.", "enum": ["local_only", "internal_network", "external_provider"]},
+    "effort": {"enum": ["minimal", "low", "medium", "high"]}
+  }
+}

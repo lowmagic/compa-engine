@@ -1,0 +1,2 @@
+# Synthetic: a must-gather root of a synthetic cluster.
+{"capture": "0010-must-gather/must-gather.local.1", "target_kind": "cluster", "target": "00000000-0000-4000-8000-000000000001", "time": "2026-09-24T10:18:29.137298602Z", "local_time": null, "raw_time": "2026-09-24 10:18:29.137298602 +0000 UTC m=+0.40", "problems": []}

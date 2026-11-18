@@ -1,0 +1,8 @@
+# want: additional properties 'routing' not allowed
+apiVersion: compa.lowmag.cc/expert/v1alpha2
+kind: Catalog
+metadata: {id: openshift.core, version: 0.1.0}
+spec:
+  engineApi: '>=0.2.0 <0.3.0'
+  tests: [openshift.core.pods]
+  routing: {keys: [openshift]}

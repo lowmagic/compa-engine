@@ -1,0 +1,60 @@
+{
+  "turns": [
+    {
+      "when": "Orient me",
+      "answers": [
+        {"calls": [{"name": "grep", "args": {"pattern": "error syncing node", "path": "namespaces/openshift-ovn-kubernetes"}}]},
+        {"text": "## The case\n\nThe OVN controller **cannot sync** worker-1, as the case details say [e1:2]. The details also hold [e999:2], and [e1:100000]."}
+      ]
+    },
+    {
+      "when": "Draft Customer update",
+      "answers": [
+        {"text": "Hello, the OVN controller on worker-1 cannot sync; we are reading its logs."}
+      ]
+    },
+    {
+      "when": "the engineer points at e1:2-4\n\nwhat do these say?",
+      "answers": [
+        {"text": "Those lines are the case's details."}
+      ]
+    },
+    {
+      "when": "which model",
+      "answers": [
+        {"text": "The first model answers."}
+      ]
+    },
+    {
+      "when": "check the forms",
+      "answers": [
+        {"text": "The controller logged `error syncing node` [e1:2] [e999:3]; see e1:2, (e1) and `no such marker 7f3a`."}
+      ]
+    },
+    {
+      "when": "cite the ledger",
+      "answers": [
+        {"text": "It began after the upgrade [l1, e1:2]. A must-gather is owed [l2], as [l9] says."}
+      ]
+    },
+    {
+      "when": "Write a handoff of this conversation",
+      "answers": [
+        {"text": "A synthetic handoff: the OVN controller cannot sync worker-1 [e1:2]."}
+      ]
+    },
+    {
+      "when": "# Comments to read",
+      "answers": [
+        {"calls": [{"name": "ledger_update", "args": {
+          "items": [
+            {"kind": "reports", "who": "customer", "text": "A synthetic report: it started after the upgrade.", "comment": "e1", "status": "none"},
+            {"kind": "asks", "who": "support", "text": "Send a fresh must-gather.", "comment": "e3", "status": "open"}
+          ],
+          "updates": [],
+          "none": [{"comment": "e2", "why": "nothing_new"}]
+        }}]}
+      ]
+    }
+  ]
+}

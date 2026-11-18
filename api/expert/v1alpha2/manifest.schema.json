@@ -1,0 +1,412 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://compa.lowmag.cc/expert/manifest/v1alpha2",
+  "title": "Expert manifest (expert.yaml)",
+  "type": "object",
+  "required": [
+    "apiVersion",
+    "kind",
+    "metadata",
+    "spec"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "apiVersion": {
+      "const": "compa.lowmag.cc/expert/v1alpha2"
+    },
+    "kind": {
+      "const": "Expert"
+    },
+    "metadata": {
+      "type": "object",
+      "required": [
+        "id",
+        "version"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/dottedId"
+        },
+        "version": {
+          "$ref": "#/$defs/semver"
+        },
+        "title": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 2000
+        }
+      }
+    },
+    "spec": {
+      "type": "object",
+      "required": [
+        "engineApi",
+        "analyst"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "engineApi": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "analyst": {
+          "$ref": "#/$defs/packagePath"
+        },
+        "references": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/packagePath"
+          },
+          "uniqueItems": true
+        },
+        "routing": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "keys": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": {
+                "oneOf": [
+                  {
+                    "$ref": "#/$defs/routingKey"
+                  },
+                  {
+                    "type": "object",
+                    "required": [
+                      "id"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "id": {
+                        "$ref": "#/$defs/routingKey"
+                      },
+                      "relationship": {
+                        "enum": [
+                          "primary",
+                          "secondary"
+                        ]
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            "signals": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": [
+                  "fact"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "fact": {
+                    "$ref": "#/$defs/dottedId"
+                  },
+                  "equals": {
+                    "type": [
+                      "string",
+                      "number",
+                      "boolean"
+                    ]
+                  },
+                  "in": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                      "type": [
+                        "string",
+                        "number",
+                        "boolean"
+                      ]
+                    }
+                  },
+                  "present": {
+                    "type": "boolean"
+                  },
+                  "matches": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 500
+                  }
+                },
+                "minProperties": 2,
+                "maxProperties": 2
+              }
+            },
+            "components": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              }
+            }
+          }
+        },
+        "tests": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/dottedId"
+          }
+        },
+        "catalogs": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "id",
+              "version",
+              "tools"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "$ref": "#/$defs/dottedId"
+              },
+              "version": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100
+              },
+              "tools": {
+                "type": "array",
+                "minItems": 1,
+                "uniqueItems": true,
+                "items": {
+                  "$ref": "#/$defs/toolName"
+                }
+              }
+            }
+          }
+        },
+        "binaries": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/binary"
+          }
+        },
+        "evidence": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "suggested": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": {
+                "$ref": "#/$defs/dottedId"
+              }
+            }
+          }
+        },
+        "analysis": {
+          "type": "object",
+          "required": [
+            "taskTypes",
+            "outputSchema"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "taskTypes": {
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": {
+                "$ref": "#/$defs/taskType"
+              }
+            },
+            "outputSchema": {
+              "const": "compa.lowmag.cc/analysis/proposal/v1alpha1"
+            },
+            "requirements": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "structuredOutput": {
+                  "enum": [
+                    "native_schema",
+                    "tool_shaped",
+                    "coerced",
+                    "none"
+                  ]
+                },
+                "minContextTokens": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "modelProfileClass": {
+                  "$ref": "#/$defs/profileClass"
+                },
+                "maxEgressClass": {
+                  "enum": [
+                    "local_only",
+                    "internal_network",
+                    "external_provider"
+                  ]
+                },
+                "toolAccess": {
+                  "enum": [
+                    "none",
+                    "submit_only"
+                  ]
+                }
+              }
+            },
+            "profiles": {
+              "type": "object",
+              "description": "Suggested model-profile class per task type; configuration overrides it.",
+              "properties": {
+                "evidence.summarize": {
+                  "$ref": "#/$defs/profileClass"
+                },
+                "routing.assist": {
+                  "$ref": "#/$defs/profileClass"
+                },
+                "analysis.diagnose": {
+                  "$ref": "#/$defs/profileClass"
+                },
+                "hypothesis.evaluate": {
+                  "$ref": "#/$defs/profileClass"
+                },
+                "action.propose": {
+                  "$ref": "#/$defs/profileClass"
+                },
+                "report.draft": {
+                  "$ref": "#/$defs/profileClass"
+                }
+              },
+              "additionalProperties": false
+            }
+          }
+        },
+        "mcp": {
+          "type": "object",
+          "required": [
+            "command",
+            "tools"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "command": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "network": {
+              "type": "boolean"
+            },
+            "budget": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "timeoutSeconds": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "memoryMB": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "outputBytes": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              }
+            },
+            "tools": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "object",
+                "required": [
+                  "name",
+                  "risk",
+                  "inputSchema",
+                  "outputSchema"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "name": {
+                    "$ref": "#/$defs/dottedId"
+                  },
+                  "description": {
+                    "type": "string",
+                    "maxLength": 2000
+                  },
+                  "risk": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "inputSchema": {
+                    "type": "object"
+                  },
+                  "outputSchema": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "dottedId": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_-]*(\\.[a-z][a-z0-9_-]*)*$",
+      "maxLength": 128
+    },
+    "routingKey": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9_.-]*$",
+      "maxLength": 128
+    },
+    "semver": {
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?(\\+[0-9A-Za-z.-]+)?$"
+    },
+    "packagePath": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_][A-Za-z0-9_./-]*$",
+      "maxLength": 512
+    },
+    "binary": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.+-]*$",
+      "maxLength": 128
+    },
+    "taskType": {
+      "enum": [
+        "evidence.summarize",
+        "routing.assist",
+        "analysis.diagnose",
+        "hypothesis.evaluate",
+        "action.propose",
+        "report.draft"
+      ]
+    },
+    "profileClass": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*$",
+      "maxLength": 64
+    },
+    "toolName": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_-]*$",
+      "maxLength": 64
+    }
+  }
+}

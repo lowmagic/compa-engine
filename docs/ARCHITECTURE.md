@@ -1,0 +1,204 @@
+# compa — Architecture
+
+## Terminology
+
+| Term | Meaning |
+|---|---|
+| compa | The product engineers install: the `compa` binary a deployment builds from the engine, with the deployment's sources and configuration |
+| The engine | The domain-agnostic code in this repository: sources, evidence, collection, the conversation, tool validation, egress |
+| A deployment | A repository of its own that builds the `compa` binary: its `main` passes its sources and configuration in `engine.Options` to `engine/cli`, which runs the command line; the public one is `compa` (`github.com/lowmagic/compa`) |
+| An expert repository | Where experts and catalogs live; the public one is `compa-experts` (`github.com/lowmagic/compa-experts`). A deployment merges the packages it ships into `engine.Options.Bundle` with `engine/compose` |
+| The companion | The engine's conversation loop and its versioned system prompt, `internal/companion` |
+| The conversation | One model context per case, or per troubleshooting chat with no case: engine-owned, stored in the case store, sent whole on every call |
+| A consult | A sub-conversation in which one expert answers one question for the main conversation (`docs/MODEL_API.md` §The conversation) |
+| The model layer | `internal/model`: the `Provider` interface, the providers and the price table |
+| Provider | One model API behind the model layer: Vertex Gemini, Vertex Claude, an OpenAI-compatible endpoint, and the fixture provider in tests |
+| Expert | A versioned, data-only domain package |
+| Catalog | A versioned package of tools experts share (`docs/EXPERT_API.md`) |
+
+## System boundaries
+
+```text
+CaseSource / ArtifactSource (passed by the deployment) / engineer shell (!<command>, compa in)
+                     |
+             Acquisition (Go)
+                     |
+       Parse / normalize / deduplicate
+                     |
+       Case store: sources, evidence, blobs
+                     |
+   The companion: the conversation loop  <------>  Session: engine/cli (compa ask, compa case …), engine/chat (compa <case>, compa chat)
+        |                 |
+        |      Tools, validated by the engine:
+        |        primitives, run_tool, command  ->  runner / sandbox
+        |        evidence tools                 ->  case store
+        |        load_expert, consult           ->  expert loader / sub-conversation
+        |        <service>_search, _fetch       ->  ReferenceAdapter
+        |      collections and lookups stored as evidence
+        |
+   Egress gate: barred accounts, redaction
+        |
+   The model layer -> providers (vertexgemini | vertexanthropic | openai | fixture)
+```
+
+## Layer separation
+
+Five layers, each replaceable without redesigning the others:
+
+1. **Engine** — owns sources and acquisition; evidence normalization, indexing and retrieval; collection — primitives, expert tests and commands in a sandboxed runner; expert discovery, routing hints, loading and pins; the conversation, its tools and the validation of every tool call; the egress gate.
+2. **Model layer** — the `Provider` interface the companion calls: one conversation in, free text and tool calls out, streamed, with cache breaks. Holds no state. Contract in `docs/MODEL_API.md`.
+3. **Providers** — one model API each, behind the model layer. Model and effort are configuration, switched with `/model`.
+4. **Experts** — domain knowledge and investigative tests, declared as data, independent of any provider or model (`docs/EXPERT_API.md`).
+5. **Deployments** — repositories of their own that pass sources, reference adapters and configuration to the engine and build the binary (§Sources).
+
+## The engine's APIs
+
+The `engine` package holds the engine and its two APIs. Toward a deployment, what it passes in `engine.Options`: its `CaseSource` and `ArtifactSource`, its `ReferenceAdapter`s, a `Sandbox`, the bundle of experts and its configuration (§Sources). Toward the engineer, `Session`: one case, or one chat with no case, opened by `Engine`, and a case's store read alone, without its source, as a `CaseStore`. Two clients use the second and import nothing under `internal/`: `engine/cli`, the command line — its usage, flags, printing and painting — and `engine/chat`, the inline chat, which `engine/cli` runs for `compa <case>` and `compa chat`. What a command or the chat shows is computed in `engine`; how it is printed is the client's.
+
+## Model boundary
+
+On every call the engine sends the whole conversation, append-only after a fixed prefix, in this order: the system prompt (the companion prompt, the expert index, the house style and intentions for case comments, and the deployment's house section); the static tool declarations; the case block (details, description, the deterministic comment digest, the attachment overview); then the messages. Cache breaks fall after the system prompt, after the case block, and at the end of each call's last message. Order, caching and compaction are defined in `docs/MODEL_API.md`.
+
+The companion prompt is the method every deployment shares, and names roles, never an organization. What is one deployment's — who "support" is, its knowledge sources, its tools' conventions — is free text in its configuration, `companion.house`, which the engine appends to the system prompt as a section of its own, inside the prefix a provider caches. It is not a template and cannot replace the prompt.
+
+A model's answer is text, with tool calls. The model has no tools of its own: it asks, and the engine checks each call — the tool exists, its parameters validate against its schema, a command passes the allowlist and its argument rules — runs it, stores the result as evidence and returns a bounded excerpt. A call that fails a check is refused with its reason as its result. A call that returns evidence also asks, in one line, the question it is meant to settle, which its excerpt gives back with the ask to say what the item settled, and any call may say what earlier results answered: the engine takes both out before the check, so nothing runs them or holds them as evidence, and the stored call keeps them; an answer is the model's reading, checked as a statement, never evidence (`docs/MODEL_API.md` §Tools). Collection is defined in `docs/COLLECTION.md`.
+
+Nothing a model writes is stored as fact. Its messages are stored as its messages; tool output is evidence. Citations, `[e12:41-58]` and `path:line`, are resolved and rendered; one naming evidence or lines the conversation was never shown, as the engine recorded what each request carried, or lines past its end, is shown flagged in the text, never dropped. Beneath an answer the chat prints one line counting the answer checks' findings — flagged citations, a citation in a form not read, an inline code span in no evidence the conversation saw, the editor's findings it did not correct and citations a revision added — which the browser's checks tab lists (§The evidence browser); and where the deployment names an editor, the answer printed is the one the editor corrected or the main model revised for its anchors, said beneath it, the answer as written kept unchanged (`docs/MODEL_API.md` §Answer checks).
+
+Every message and tool result is redacted by the egress policy before it leaves the host, the case block and expert guidance included, and the barred-accounts rule applies to every model call, consults included (§Security boundaries).
+
+A provider default that changes what the model sees is not acceptable as a default. SDK retries are disabled, automatic function calling is off, and no compaction happens that the engine did not do: the first produces calls the engine did not author, the second runs tools the engine did not validate, the third means the model saw material the engine did not construct.
+
+Because experts declare guidance and tools rather than providers or model IDs, the same expert runs unchanged on every provider, and differences between models are measurable rather than structural.
+
+## Expert boundary
+
+The engine implements the versioned Expert API defined in `docs/EXPERT_API.md`. External packages declare domain knowledge, a one-line summary, routing signals and investigative tests composed from engine primitives and declared binaries. The engine validates, resolves and pins packages before using them, and runs their tests in its sandboxed runner. Every installed expert is listed in the system prompt's index; `load_expert` appends one expert's guidance to the conversation and pins it there, and `consult` asks one expert one question in a sub-conversation. Experts cannot access stores directly or name a provider or a model; the only code they may ship is an optional MCP server the engine runs sandboxed. Distribution defaults to a tested bundled set, with local overrides and optional exact-version downloads; no network dependency at runtime.
+
+## Sources
+
+Case data and artifacts reach the engine through two interfaces, and external knowledge-base references through a third:
+
+- `CaseSource` — case metadata and comments, read-only. A source reports the case's account number where it has one, which the engine keeps apart from the case's evidence, for the barred-accounts check alone, and never shows a model. Posting a private comment is later work, added then as a separate interface a source may also implement. A comment carries, where the source gives them, its author's kind, its author's ID beside the name, an edit time, and the source's own mark that an automated process wrote it; none is guessed from a name, and a source that gives none conforms. An author's kind is the source's own word: `support` and `customer` are the two the engine has labels for, and any other, such as `partner` or `vendor`, is carried as given and shown under its own name (`stubcases.TestAuthorKindIsTheSources`, `cli_test.TestSupportCommentCutover`). The support-side display name is `companion.supportName`, default `Support`. Comment exclusions use `--exclude-support`, `--exclude-customer`, and `--exclude-kind <kind>` for any kind.
+- `ArtifactSource` — a directory tree of artifacts such as must-gathers and sosreports, which the runner mounts read-only. A source that can fetch a case's artifacts also implements `ArtifactFetcher`: where a case has no artifact directory, `compa <case>`, `compa ask` and `compa case open` offer the fetch on the engineer's terminal, a yes the default, after the case is read and before its store is made, so a folder the fetch brings holds the store; a failed fetch is said and the case opens without its folder, and with no terminal nothing is asked (`cli_test.TestCaseWithoutAFolderIsOfferedItsFetch`).
+- `ReferenceAdapter` — one external knowledge service, such as KCS: a search, and a fetch of one page of a document by its ID, each with a typed outcome, and its offer, the operations it serves and the kinds of document it holds, which are all the engine offers models, as tools named for the service, `kcs_search` and `kcs_fetch` for KCS. A deployment passes its adapters in `Options.References`, one per service ID. The adapter's own HTTP client holds its endpoint and credential; none reaches the conversation, evidence or an invocation record. A lookup's result is stored as evidence, `reference_search` or `reference_document`, before the model sees it, and a query is redacted before the adapter sees it.
+
+Deployments compose at compile time. The engine exposes a public `engine` package and never imports deployment code; each deployment is a repository of its own, importing only `engine/...`, so the engine's module carries none of its dependencies (`engine.TestEngineImportsOnlyDeclaredDependencies`); deployment code provides its own `main`, which passes its source implementations and configuration in an options value, with the command line, to `engine/cli` — there is no registry, so a binary's sources are fixed when it is compiled — and builds the binary engineers install. The engine itself ships a stub `CaseSource` over synthetic fixtures (`engine/stubcases`, `testdata/cases/`) and a local-directory `ArtifactSource` (`engine/localdir`), so it builds, tests and runs end to end with no external service; `engine/sourcetest` holds the conformance tests every source passes, and `engine/expertcheck` checks packages and runs their tools against fixtures for expert repositories, importing nothing beyond the loader and the runner. An artifact source returns the case's directory with symlinks resolved, so a link named for the case reaches the folder it links to.
+
+## Routing registry
+
+A case's routing keys are whatever the case source reports; the engine does not invent or correct them. What a key is belongs to the deployment. Keys change over time as the product catalog changes. The registry content is a versioned routing library maintained with the experts; the engine owns the registry interface and loads the library like any other expert content. The library normalizes canonical key identifiers, aliases, component/operator names, and relationships to expert IDs, while preserving provenance back to the sources each came from. Build forward (`key → experts`) and reverse (`component/tag → candidate keys → experts`) indexes. Key-to-expert relationships are many-to-many; signals are recommendations, not an assertion that a root cause or exclusive owner has been established. An installed expert's manifest decides its own relationship to a key it names, the library's provenance kept with it; the library's relationship counts for a key the manifest does not name. A deployment with no routing library gets experts by the model's loading from the index alone.
+
+Deterministic routing produces hints: candidate experts with the signals that matched, the registry revision and their weights. When the case's routing key has a primary expert in the library, the opening turn loads it before the model's first call, as if the model had asked; beyond that, the model loads or consults experts from the index as the case needs. A case's routing key is a strong signal, not a conclusive one, and routing alone executes nothing.
+
+A deployment may install only some of the experts a routing library names. Its entries for experts that are not installed are ignored, never an error, and said once where routing is reported (`compa case open`), by expert ID (`routing.TestRouterIgnoresAndReportsUninstalledExperts`, `engine_test.TestPartialBundle`).
+
+## Ownership
+
+**Engine owns:** source access, parsing, immutable evidence IDs, collection, authorization, the conversation and its assembly, tool declarations and the validation of every tool call, expert loading and pins, the egress gate, model selection policy, caching, and retention. **Model owns:** interpretation of the case and its evidence, which tools to call and which experts to load or consult, and the wording of its answers and drafts. **Engineer owns:** investigative direction, discretionary shell exploration, acceptance of conclusions, what is sent to the customer, and case disposition.
+
+## Data model (logical, not a fixed database schema)
+
+- `Source`: origin, acquisition timestamp, external ID, content hash, sensitivity, storage pointer, processing version; and for each attachment an artifact source reports, its origin and name, its own file and where its contents are, its size, the state and kind the source reports, and when it was first and last seen. A source is a record of what exists, updated as the report changes; the evidence made from it, such as the artifact overview, is immutable.
+  - Each opening of a case records what it found current — the metadata, comments and overview evidence, and the attachments reported, none included — and what is current is read from the latest such record.
+  - An opening makes these records in order: the case's details and the attachment overview first, the comments the last reading found carried forward; then the fresh comments; then the attachments' counts, an `artifact_counts` item of its own, made by a walk of only the attachments not counted before as their source reports them now.
+  - The artifact inventory, an `artifact_inventory` item of its own, made without a model: each attachment as its source reports it with the captures the catalogs' capture `identity` tools found in it (`docs/EXPERT_API.md` §Catalog packages), each run stored as evidence, and each capture's target, capture time and currency. Within one capture kind and target, captures are ordered by `time`, or by `local_time` only where every one has it and none has `time`; the latest is `current`, the earlier `outdated` with the current one as `superseded_by`; one host's report found twice with the same times is a `duplicate`; an unread target or time, times that cannot be compared or tie for the latest, an invalid identity line or two lines that disagree make a capture `uncertain`, saying why. Attachment numbers and upload order are never used. An attachment no identity tool recognizes is listed with its kind and size and no currency, and none is hidden. An attachment its source reports unchanged keeps the identity read before while the installed identity tools are the same and its runs completed, so the item is made again only when one of those changes.
+- `Extract`: structured deterministic output, source location or query, extractor version, content hash. None exists yet: domain parsing lives in expert tests, and the engine has no extractor of its own.
+- `Evidence`: immutable selected payload or bounded excerpt, provenance, scope, confidence/status metadata; named once per case by a short name (`e12`), never renumbered or reused, so a name means the same in every conversation, item and command.
+- `Conversation`: one per case or troubleshooting chat — the case it serves, its parent (the conversation a consult runs under), the conversation it was compacted from, when it was created, and its expert pins. The case block it starts from is written once; later comments and attachments arrive as `case update` messages. Each case ledger call is a conversation of its own, kind `ledger`, each editor check one of kind `editor`, and each review one of kind `review`.
+- `Message`: one entry of a conversation, in order — its role (engineer, model, or a tool result), its text, and for a model message its tool calls, each with its name and parameters, whether it was refused and why, and its result by evidence ID; and the invocation that produced it. An editor's correction of an answer, the engine's request for a revision, the record of what was shown when a revision is not taken, a review the engineer asked for, and the engineer's verdict that a value an answer states is unsupported or incorrect are messages of their own after what they concern, which is never rewritten.
+- `Exposure`: what each conversation was shown of the evidence, recorded as the engine builds its requests (`docs/MODEL_API.md` §Citations) — with each engine-authored message, the lines of each item it gives with its content, by short name, or the item whole, written with the message and never changed; for each model call as it is sent, the messages it carried; and on each conversation whether its record is kept from its start. A name alone, and anything a model wrote, is no exposure. A conversation stored before the record has none, its exposure unknown and never inferred.
+- `Check`: one editor check or review of an answer or item (`docs/MODEL_API.md` §Answer checks) — the checker, what it checked and its name (`a7`, `i3`), its conversation and invocation, its statements, its accepted findings under the findings schema's version, the elements dropped, its outcome (clean, corrected, flagged, revised, revision failed, unchecked; reviewed, failed) and when.
+- `Span verdict`: the engineer's verdict on a code span of an answer found in no evidence the conversation saw, or arithmetic that does not hold (`docs/MODEL_API.md` §Answer checks) — the answer as the model first wrote it and its name (`a2`), the span, the statement holding it, its kind (supported, inferred, unsupported or incorrect), the ranges of evidence lines it rests on, in order, each by item, name, first and last line and the lines as stored, and when; one per span of an answer. Only a verdict that it is unsupported or incorrect is also a message the model reads.
+- `Item`: an answer the engineer pinned or a draft written with `/draft`, with its intention and audience where it has them; kept for the engineer to copy, never posted by the engine.
+- `LedgerItem`: the case ledger's reading of one comment, keyed by the case — its ID (`l1`, `l2`, … numbered when kept), what it is (`asks`, `commits`, `reports`, `provides`), who, one line of text, the comment it cites, a commitment's due date, a provided item's attachment as the comment names it, its status with the later comment that set it (`superseded` among them, never touching the artifact inventory), the engineer's correction, and the call that made it; beside them, each comment the ledger read with what it made of it. A model's reading, never evidence (`docs/MODEL_API.md` §The case ledger).
+- `Invocation`: one model call — the case, conversation and turn, a consult's calls under the consult's own conversation; the provider and model with its source and the effort sent; a usage report of disjoint token categories, each value either a count or `unavailable`; provider-reported cost where available, otherwise the engine's estimate, labelled with the price table version; timings, outcome and flags; the request as sent and the raw response. The expert pins in force are the conversation's. Fields in `docs/MODEL_API.md`.
+- `ExpertPin`: per conversation — expert ID, version, content digest, the Expert API version it was made under, test versions; and for each catalog the expert uses, its ID and range with the resolved version, digest and the versions of the tools used, or the dependency marked unresolved with the reason. An expert using no catalog has no catalog field. A conversation keeps its pins; a bundle update reaches it only through `/compact` or a new conversation.
+- Comment exclusions: the engineer's rules for which comments models read, `all` among them, `keep` reading one comment whatever else.
+
+Use stable IDs and explicit schema versions. There is no journal: the conversation and the evidence are the case's history.
+
+Token usage is a field group on `Invocation`, not a subsystem. Usage reporting is a read-only query over invocation records grouped by case, conversation, consult and model, with no separate store or write path. Usage and cost semantics — disjoint categories, unknown versus zero, and provider-reported cost or an engine estimate from a price table, never mixed — are defined in `docs/MODEL_API.md`.
+
+## Storage and compaction
+
+SQLite in WAL mode for indexed metadata and relatively small payloads; zstd-compressed content-addressed blobs for large retained extracts. Avoid making the SQLite database itself a single opaque compressed file. Use streaming readers for large archives and logs; enforce size, decompression, and resource limits.
+
+One process holds a case's store at a time: the chat and every `compa case` command each take its lock, and one refused says which process holds it, by command, process ID, user and host. The store's directory is its maker's alone. SQLite runs with exclusive locking and one connection, since WAL's shared memory cannot be relied on over a network filesystem, where case folders may live; so every writer is in the one process.
+
+Store unchanged raw acquisition artifacts only when justified by source availability or retention policy. Deduplicate by strong hash. Distinguish source compression (storage) from token reduction (filtering, normalization, retrieval).
+
+## History and re-running
+
+1. **History:** the conversation is the history — the engineer's messages, the model's answers, and each tool call with the evidence it stored. A compacted or reloaded conversation stays, linked to the one that follows it, and a consult's transcript is kept.
+2. **Re-run:** a saved model call can be re-sent to the same or a different provider for debugging and model comparison, with `compa case resend <case> <call> [--model name [--effort effort]]`, the call named as `compa case trajectory --json` gives it. The request is sent as it was stored, through the gate and the target provider's redaction, without provider data such as thought signatures where the model differs; the call is recorded as one of its own linked to the original, and no conversation is read or written. The original's answer and the new one are printed together. The result is not expected to match the original, and no fidelity guarantee is made.
+
+Tools and shell commands are not replayed; running one again is a new call.
+
+## The chat
+
+`compa <case>` opens an inline chat that prints into the terminal's own scrollback (Bubble Tea's inline mode, `tea.Println`), with a status bar directly above the input at the bottom; the terminal's scrollback, search and copy work as in any shell. A reopened case resumes its conversation.
+
+Opening a case prepares it through the engine's one entry point, `Session.Prepare`, which `compa ask` uses too: the comments are read, then the attachments counted and inventoried while the case ledger reads the comments it has not, the status bar saying each as it runs (`reading the comments`, `identifying the attachments`, `the ledger: reading 25 of 60 comments`). The chat then prints one line for the inventory, its attachments and their captures by currency, and one for the ledger: its items and the comments left unread, that it is still reading, or why it did not run — the case barred, no ledger model configured, `--no-open`, or a reopened case. For a case with no conversation yet, the opening turn follows, unless `--no-open`: the ledger is waited for up to a bound (`docs/MODEL_API.md` §The conversation), and past it the opening goes on without it, the ledger's line saying so and a later line its end; the opening orients the engineer from the case block and the ledger, with a few tool calls at most. A case reopened on its conversation makes no model call, the ledger's included: the chat prints what the conversation has yet to be shown since the case was last worked — new comments and attachments — or that nothing is new, and, where the provider's cache has expired and the conversation is large, how much the next call resends without it. Nothing compacts by itself.
+
+Then, on a reopened case, the chat offers what follows in a panel above the status bar, drawn as the command list is, transient and never in the scrollback; while it is open its keys are its own, and nothing calls a model until the engineer chooses. Where the provider's cache has expired on a large conversation: `1` full context, the conversation as it is, its next call resending the estimated tokens said without the cache; `2` suggested context, a new conversation begun with no model call from the case's state, the ledger, the ranked items and the last exchange; `3` the same and a handoff the model writes, one call over the earlier conversation (`docs/MODEL_API.md` §The conversation, Reopening); ↑↓ and enter choose too, and esc puts it off to `/reload`. After that, or at once where the cache is fine, where the case gained comments or attachments: `c` catches up, and esc puts it off to `/catchup`.
+
+On reopening, the chat prints the saved engineer messages, model answers and tool summaries, including the earlier conversations linked by compaction or a reload, before the preparation's lines. `--no-open` restores that history without calling a model. The last answer's evidence navigation is restored too; pending evidence marks and the session's model override are not persisted.
+
+When the terminal's width changes and stays put for 200 ms, the chat clears the terminal, its scrollback included, and prints everything it printed again at the new width, at most the last 20,000 lines, then redraws the bar and input. An inline frame cannot be redrawn in place after a terminal rewraps it: on a narrowing, iTerm2, Ghostty, kitty and tmux turn its long rows into more rows than the renderer moves up over, and the top of the old frame stays behind (charmbracelet/bubbletea#1867). Every row is drawn a column short of the terminal's width, so none fills it. What the terminal held before the chat began is cleared with it.
+
+By default the chat prints the engineer's message, the model's answer as Markdown streamed as it arrives, and between them one dim line per batch of tool calls, in the order the model made them, each call followed by its own question; a batch wider than the terminal gets a row for each call, each cut to the terminal's width. The status bar shows, while work runs, an animated indicator, `ctrl+c to stop` and what is running; then the case, the model and effort; and at its right the case's or chat's cumulative tokens, cost and cache reads, read from the stored invocation records when the chat opens and after every call, consults, compacted conversations and the case ledger's calls included. A cache share is shown only when every call reported its input, cache read and cache write tokens; otherwise the cache reads are shown as a count, a floor where some were unavailable.
+
+Typing `/` opens the command list above the status bar, filtered by what follows the slash: ↑↓ choose, tab completes the name, enter completes and runs a command that takes no argument and otherwise waits for its argument, and esc closes the list and keeps the input. An exactly typed command runs as typed. The list is transient and never enters the scrollback.
+
+Keys: enter sends; `ctrl+o` prints the last turn's tool calls and results in full; `ctrl+c` cancels a running turn, and pressed again, or with no turn running, quits.
+
+Commands:
+
+- `/analyze` — a structured analysis of the case.
+- `/draft [intention]` — a customer update or internal note for an intention from the configuration (`comments.intentions`, the engine's base set unless the deployment replaces it, in the house style, `comments.style`), kept as an item; the intentions are listed when none is given. Never posted by the engine.
+- `/load <expert>` — load an expert's guidance into the conversation.
+- `/experts` — the installed experts, with those loaded.
+- `/evidence [eN[:lines]]` — open the browser (§The evidence browser): at that item and those lines, or, with none given, at the last answer's first citation.
+- `/comments [N]` — the case's comments, or one.
+- `/ledger` — the case ledger (`docs/MODEL_API.md` §The case ledger): the comments it has not read read first, with no model call when there are none; then the open asks by who owes them, the pending commitments, and every comment in the case's order by its number (`c#8`), author, what the deployment calls a support author (`companion.supportRole`, `Support` by default) or Customer, visibility, time and evidence name, with its items, or in one line why it gave none.
+- `/pin` — keep the last answer as an item.
+- `/items` — open the browser on its items tab: the pinned answers and drafts.
+- `/copy [item]` — copy an item, the last by default, to the clipboard through OSC 52, which reaches it over SSH.
+- `/review [--ranked] [item]` — a second opinion on the last answer as shown, or an item, from the reviewer (`docs/MODEL_API.md` §Answer checks), appended beneath it and to the conversation as another model's reading; with `--ranked`, an experiment, the reviewer is also given the evidence the conversation used most that the text does not cite; after a draft, `r` as the first key takes the same offer.
+- `/check [aN]` — open the browser's checks tab (§The evidence browser) at the findings of the last answer, or `aN`, at its first span not judged, else its first finding (`docs/MODEL_API.md` §Answer checks); after an answer, `f` as the first key takes the same offer.
+- `/model [model] [effort]` — show or switch the model and effort.
+- `/compact` — write a handoff and continue in a new linked conversation (`docs/MODEL_API.md`).
+- `/reload [full|suggested|summary]` — go on with the conversation as it is, or in a new linked one begun from the case's state and what is carried from it, with or without a handoff (`docs/MODEL_API.md` §The conversation, Reopening); with no argument, the three with what each costs now.
+- `/catchup` — the ledger reads the comments it has not, then one turn asks what changed since the case was last worked and whether it changes the current understanding; with nothing new, it says so and calls no model.
+- `/ranked` — the evidence the conversation used, ranked by what was done with each and how recently, with its lines and why; no model call.
+- `/usage` — tokens and cost by conversation, consult and model.
+- `/debug` — every call's input size, cache share and timing inline from then on, and each tool call's question and answers whole, an answer's flags beside it.
+- `!<command>` — run a command in the engineer's shell and offer its output as evidence (§Shell lifecycle).
+
+`compa chat [--dir <path>] [<chat>]` is the same chat with no case, and no opening turn: the directory, when given, is the artifact root, and its store lives under `~/.local/share/compa/chats/<chat>/`, a new chat named `chat-<UTC time>` and an earlier one resumed by its name, a name that could not name a case refused. The directory is kept with the chat by its real path: resumed without one, the chat is over it again, and resumed with another, or with one where it began with none, it is refused (`engine.TestChatKeepsItsDirectory`). A chat with no directory holds no case's data, so its calls go out under a barred-accounts list; a chat over a directory belongs to an account that cannot be checked, so where the deployment names a list, its every model call is refused, with no override, and the engineer opens the case instead (`engine.TestChatOverADirectoryUnderAList`). `compa ask <case> "<question>"` prepares the case as the chat's opening does, the ledger waited for as before an opening, runs one turn in the case's conversation, and prints the answer as Markdown. `compa case …` commands call no model. Neither `compa <case>` nor `compa chat` runs without a terminal for its input and output: each refuses, saying `compa ask` runs one turn without one.
+
+### The evidence browser
+
+The one place to navigate what the case holds, over the chat rather than beside it: it takes the full screen (Bubble Tea's alternate screen) and `esc` returns to the chat with its scrollback untouched. Navigating changes nothing in the conversation; a verdict given in the checks tab is kept as it is given.
+
+- **The list:** every piece of evidence, newest first — its short name, what produced it (the tool and its parameters, or the command), its size, and the answers that cite it — filtered as the engineer types.
+- **An item:** its lines under their stored numbers, its provenance and any stop or truncation note; search within it; `n` and `p` step through the citations of the answer it was opened from, each at its lines, across items.
+- **Pointing the model at it:** marking a range of lines and sending it makes the engineer's next message say which lines they point at, `the engineer points at e12:41-58`; the model reads them with `evidence_read` as it would any evidence. Nothing is sent until the engineer sends the message.
+- **Items:** a second tab lists the pinned answers and drafts, each opened whole and copied from there (`/copy`).
+- **Turns:** a third tab lists what the engineer sent and what the model wrote, oldest first, read from the stored conversation, with an answer's correction by the editor, the request for its revision and the revision after it, each review by what it reviewed, and each verdict of the engineer's the model reads; each opens as stored, its Markdown unrendered, and is copied from there.
+- **Checks:** a fourth tab lists every finding of the answers printed this run (`docs/MODEL_API.md` §Answer checks), by answer: first each value flagged — a code span found in no evidence, with a line close to it or none, or arithmetic that does not hold — with its state, `?` unjudged, `✓` supported, `~` inferred, `⚠` unsupported or `✗` incorrect; then the findings for reading, marked `·`: flagged citations, citations in a form not read, the editor's findings it did not correct and citations a revision added, then the anchors a revision was asked to fulfil, which the chat sums up in one line beneath the answer. `/check [aN]`, or `f` after an answer, opens it at that answer's. The value under the cursor shows its claim, the complaint, its verdict and its evidence: the lines marked for it, its verdict's or its closest line, with two lines before and five after a line, one before and two after a range, numbered and shown as the item's view shows them. `y` or enter keeps it supported, `i` inferred, `u` unsupported, `x` incorrect; `m` opens the item shown, and `e` the list to open any other, where `v` and enter mark ranges for the value, several and of several items, up to as many as a verdict may rest on, `d` drops the last, and `esc` returns to the same value. A finding for reading shows what it is, why, the most the evidence supports, or what an anchor asked, and the lines it cites in context; it takes no verdict, its keys saying so, and `m` opens the cited item at its lines. Nothing is printed into the chat while the tab is open; leaving the browser, once any verdict being kept is, prints one line for each answer judged, how many of each kind and which the model reads at its next call, the unsupported and incorrect.
+
+`compa evidence <case> [eN]` prints the same outside the chat, for piping to a pager or `grep`.
+
+## Shell lifecycle
+
+The engineer runs a command in their own shell from the chat with `!<command>`, and its output is offered as evidence; `compa in` ingests a command's output from any shell. Shell state is mutable and separate from the case store; ingestion promotes output to immutable evidence. Ingestion-time node associations must be unambiguous. An embedded PTY, independent of any terminal multiplexer, is later work. The engineer's shell is unrelated to the model's tools and grants a model nothing.
+
+## Failure and recovery
+
+Acquisition and deterministic parsing use idempotent work IDs, bounded queues, backpressure, retry policies, and resumable state. An unavailable, failing or misconfigured provider degrades the conversation only: tools, evidence, comments and every `compa case` command continue to function, and the failure is recorded as an invocation outcome and said in the chat. A failed tool call is a result the model works around, never fatal to the turn. Source and evidence persistence survive the chat's termination. Explicitly handle cancellation and case closure, including cancellation propagated into an in-flight model call and running tools.
+
+## Security boundaries
+
+Treat case text and artifacts as untrusted input, including prompt-injection attempts. Treat model output as untrusted input for the same reason: a tool call is validated, never executed on its word. A command a model requests runs only as argv through the allowlisted, sandboxed runner, never through a shell. Enforce access control outside model prompts. Preserve customer isolation. Avoid logging credentials, token contents, kubeconfig material, or sensitive command output inadvertently. Apply redaction before any remote submission and before retained transcript storage, based on approved policy; the provider's declared egress class determines which policy applies, and a call whose content exceeds the permitted egress class is not sent. The barred-accounts check sits at the same gate, before redaction's, on every model call, consults included: where the deployment names a list, a call whose case's account is on it, or cannot be checked and is not overridden, is not sent (`docs/SPEC.md` §5).

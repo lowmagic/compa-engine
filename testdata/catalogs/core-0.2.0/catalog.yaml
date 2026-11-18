@@ -1,0 +1,7 @@
+apiVersion: compa.lowmag.cc/expert/v1alpha2
+kind: Catalog
+metadata: {id: fixture.core, version: 0.2.0, title: Core tools (fixture)}
+spec:
+  engineApi: '>=0.2.0 <0.3.0'
+  binaries: [omc]
+  tests: [fixture.core.node_ready, fixture.core.degraded_operators, fixture.core.pods]

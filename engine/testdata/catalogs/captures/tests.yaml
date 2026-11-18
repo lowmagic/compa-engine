@@ -1,0 +1,24 @@
+apiVersion: compa.lowmag.cc/expert/v1alpha2
+kind: Tests
+tests:
+  # Synthetic stand-ins for the experts repository's identity tools: each
+  # capture in the engine's inventory tests carries the identity line its
+  # tool would write, in a file of its own, and the tool passes it on.
+  - id: fixture.captures.gather_identity
+    version: 0.1.0
+    description: Each must-gather root's identity beneath dir, one JSON object a line, from the synthetic gather-identity.json files.
+    params:
+      dir: {type: string, maxLength: 1024}
+    run:
+      - jq: {path: '{{dir}}', glob: gather-identity.json, filter: '.'}
+    output: {format: lines}
+    fixtures: fixtures/gather_identity
+  - id: fixture.captures.sos_identity
+    version: 0.1.0
+    description: Each sosreport's identity beneath dir, one JSON object a line, from the synthetic sos-identity.json files.
+    params:
+      dir: {type: string, maxLength: 1024}
+    run:
+      - jq: {path: '{{dir}}', glob: sos-identity.json, filter: '.'}
+    output: {format: lines}
+    fixtures: fixtures/sos_identity

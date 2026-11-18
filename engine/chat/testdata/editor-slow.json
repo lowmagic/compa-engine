@@ -1,0 +1,16 @@
+{
+  "pace": "400ms",
+  "turns": [
+    {
+      "when": "",
+      "answers": [
+        {
+          "text": "Reading it slowly."
+        },
+        {
+          "text": "Still reading."
+        }
+      ]
+    }
+  ]
+}

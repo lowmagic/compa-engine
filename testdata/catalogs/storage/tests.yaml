@@ -1,0 +1,11 @@
+apiVersion: compa.lowmag.cc/expert/v1alpha2
+kind: Tests
+tests:
+  - id: storage.node_files
+    version: 0.1.0
+    description: Node resource files in the must-gather.
+    run:
+      - find: {path: cluster-scoped-resources/core/nodes, glob: '*.yaml'}
+    output: {format: lines}
+    interpret: analyst.md#node-files
+    fixtures: fixtures/node_files

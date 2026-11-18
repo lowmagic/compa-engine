@@ -1,0 +1,26 @@
+# A synthetic fixture, written for this schema.
+apiVersion: compa.lowmag.cc/expert/v1alpha2
+kind: Cases
+tool: fixture.files.tail
+root: ../artifacts
+modified: 2026-10-21T00:00:00Z
+requires: [normal, missing_file]
+credentials: [auth/kubeconfig]
+cases:
+  - name: the last line
+    covers: [normal]
+    note: The log's end.
+    params: {file: app/server.log, lines: 1}
+    status: ok
+    output: |
+      2026-10-01T09:29:00Z INFO done
+  - name: a file not attached
+    covers: [missing_file]
+    params: {file: 0099-not-attached.log}
+    status: unavailable
+    reason: 'precondition: 0099-not-attached.log does not exist in the artifacts'
+    output: ''
+  - name: cut short
+    status: ok
+    truncated: true
+    output: "a\n"

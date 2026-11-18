@@ -1,0 +1,11 @@
+# Synthetic fixture for the epistemic checks' tests: invented, nothing from a customer.
+Ceph OSD writes fail with ENOSPC when OSD debug logging is left raised
+Environment
+An OpenShift cluster running Rook-managed Ceph OSDs.
+Issue
+An OSD logs "no space left on device" writing its log under /var/lib/rook.
+Root cause
+`debug_osd` was left at 20/20 after a troubleshooting session.
+The OSD's log grew until the filesystem holding /var/lib/rook was full.
+Resolution
+Set `debug_osd` back to its default, then remove the OSD's rotated logs.

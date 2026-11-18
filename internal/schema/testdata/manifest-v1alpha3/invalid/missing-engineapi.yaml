@@ -1,0 +1,5 @@
+# want: /spec: missing property 'engineApi'
+apiVersion: compa.lowmag.cc/expert/v1alpha3
+kind: Expert
+metadata: {id: openshift.platform, version: 0.1.0, summary: 'A manifest for the schema''s tests'}
+spec: {analyst: analyst.md}

@@ -1,0 +1,4 @@
+apiVersion: compa.lowmag.cc/expert/v1alpha3
+kind: Expert
+metadata: {id: check.manifest}
+spec: {}

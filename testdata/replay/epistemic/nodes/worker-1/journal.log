@@ -1,0 +1,3 @@
+# Synthetic fixture for the epistemic checks' tests: invented, nothing from a customer.
+Oct 20 11:55:31 worker-1 rook-ceph-osd[4410]: write /var/lib/rook/osd3/log: no space left on device (ENOSPC)
+Oct 20 11:55:32 worker-1 rook-ceph-osd[4410]: write /var/lib/rook/osd3/log: no space left on device (ENOSPC)

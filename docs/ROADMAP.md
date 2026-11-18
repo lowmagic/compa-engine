@@ -1,0 +1,218 @@
+# Roadmap
+
+The order compa-engine gets built in. Each slice is usable on its own, names what a user would notice and the
+[spec](SPEC.md) sections it delivers, and has a done-when someone can demonstrate. A requirement not yet in a slice
+stays in the spec and waits for one here.
+
+## 1. The companion as a library
+
+Status: done
+
+A deployment passes a case source, an artifact source, a bundle of experts and its configuration in
+`engine.Options`, and its binary gives an engineer the chat: a case opened and oriented, questions answered with
+tools run in the sandbox and their results kept as evidence, experts loaded or consulted, drafts written, each answer
+checked against the evidence it cites, and usage recorded for every call.
+
+Delivers: Acquisition, Evidence storage and retrieval, The companion, Expert packages, The model layer, The
+engineer's shell without the embedded shell, Usage without re-sending a saved call, User interface.
+
+Done when: `make check` passes with no provider reachable; and a deployment's binary on a synthetic case with the
+fixture provider opens the case, answers a question citing evidence a tool returned, writes a draft kept as an item,
+and shows the case's usage after it is reopened.
+
+Answer-check coverage includes hyphen and en-dash citation ranges and preserving the cited source bytes for
+both checkers (`TestCitationEnDashRanges`, `TestCheckerQuotesEnDashRange`). Retained model text stays labelled
+as model text; consult handoffs carry claim bases, and action premises and scoped negative checks remain reviewable.
+The opt-in `TestLiveEpistemicReview` and `TestLiveEpistemicPackets` add synthetic paired evaluations with
+report-only rubrics. Each was run once live, one run per scenario: the harness ran end to end after one fix, isolating
+each review scenario's store from the stub case; they make no empirical benefit claim and do not replace behavioral
+evaluation of deployment-specific experts.
+
+## 2. The deployment's house section
+
+Status: done
+
+The companion's prompt names roles, not an organization, and a deployment says in its configuration who "support" is,
+which knowledge sources it has and its tools' conventions. The engine appends that text to the system prompt as a
+section of its own, inside the prefix a provider caches.
+
+Delivers: The companion (the prompt's method, shared by every deployment).
+
+Done when: no prompt file names an organization; a configuration's house text appears once in the system prompt,
+before the first cache break; and the live scenarios and the checks' benchmark are compared before and after the
+rewording on one model.
+
+The comparison was run five times per arm on gemini-3.8-flash, from one tree: `TestLiveCompanionBehaviour`'s fourteen
+scenarios and `TestLiveCheckReplay` on that model, the prompt as it was with no house section against the prompt
+naming roles with a deployment's house section (`COMPA_LIVE_HOUSE`). Every step of both arms ended without error.
+Most yes-or-no measures matched in every run. Three did not: where the customer tells two nodes' captures as one
+node's disk filling, the answer kept the nodes apart in five runs before the rewording and three after, the other two
+repeating the customer's progression; the turn after the opening of the standing-theory scenario cited the refuting
+line in three runs before and two after; a compaction's handoff named the engineer's last message in four runs before
+and five after. Own-voice certainty terms and code spans found in no evidence were a little more frequent after. The
+checkers' prompts are the same bytes in both arms, yet the editor caught fewer shapes in the second arm and the
+reviewer more, which is the size of the model's variance on these runs. Five runs per arm show no effect of the
+rewording that the variance does not cover; the told-progression scenario is the one to watch.
+
+## 3. Re-sending a saved call
+
+Status: done
+
+An engineer debugging an answer can send a stored call again, to the same provider or another, and compare what
+comes back.
+
+Delivers: Usage ("Allow a saved call to be re-sent").
+
+Done when: a stored call is re-sent on the fixture provider, its result is recorded as a call of its own linked to
+the original, and nothing in the conversation changes.
+
+`compa case resend <case> <call> [--model name [--effort effort]]` sends the request again, to its model or a
+configured one, and prints the original's answer beside the new one (`docs/ARCHITECTURE.md` §History and re-running).
+
+## 4. Expert MCP servers
+
+Status: planned
+
+An expert can ship a server for logic that primitives and commands cannot express, and its tools run like any
+other: sandboxed, read-only, their results evidence.
+
+Delivers: Expert packages ("An expert may ship an MCP server").
+
+Done when: a fixture expert's server answers a tool call inside the sandbox, a tool not declared read-only is
+refused, and no model can reach the server.
+
+## 5. Posting a private comment
+
+Status: planned
+
+An engineer can post a draft to the case as a private comment from the chat, where the deployment's case source
+allows it.
+
+Delivers: Acquisition ("posting private case comments").
+
+Done when: a case source that implements posting receives the item the engineer chose, exactly as kept, only after
+the engineer confirms it; and a source that does not implement it offers nothing.
+
+## 6. An embedded shell
+
+Status: planned
+
+An engineer can keep a shell open beside the chat, inside tmux or outside it, and offer what a command prints as
+evidence.
+
+Delivers: The engineer's shell ("A persistent embedded shell").
+
+Done when: a command run in the embedded shell inside tmux is offered as evidence without a nested tmux, and
+nothing is kept until the engineer accepts it.
+
+## 7. An OpenAI-compatible provider
+
+Status: done
+
+A deployment can name models on OpenRouter, or on an inference server of its own, for any profile: the engine calls
+one OpenAI-compatible Chat Completions endpoint, held to the egress class the deployment declares for it and redacted
+by that class's policy.
+
+Delivers: The model layer (the providers).
+
+Done when: a fixture endpoint's streamed answer, tool calls and usage are read, an endpoint declared past
+`reasoning.maxEgressClass` is refused before it is reached, and a two-tool turn runs live through OpenRouter, the
+second call reading from cache.
+
+## 8. More than one OpenAI-compatible endpoint
+
+Status: planned
+
+A deployment can name models on OpenRouter and on an inference server of its own at once, each endpoint with its own
+base URL, key variable, egress class and cache marks, where configuration now holds one endpoint.
+
+Delivers: The model layer (the providers).
+
+Done when: two configured endpoints each answer a profile's calls from a fixture server, each held to its own egress
+class by the gate and redacted by its policy, and a model names its endpoint without naming a URL; and a deployment's
+example configuration names an OpenRouter model beside its Vertex ones.
+
+## 9. Knowing an endpoint's cache
+
+Status: planned
+
+Reopening a conversation on an OpenAI-compatible endpoint says when its provider's cache has expired, as it does for
+Vertex, whether the endpoint caches by the engine's marks or on its own: an endpoint's configuration may say how long
+its cache lives, where only the marks' lifetime is known now.
+
+Delivers: The companion (reopening, "whether the provider's cache has expired").
+
+Done when: a reopened conversation on an endpoint with a configured cache lifetime says the cache expired only past
+it, and one with none says nothing of a cache.
+
+## 10. The command line apart from the engine
+
+Status: done
+
+The `engine` package holds the engine and its two APIs, what a deployment passes in `engine.Options` and the
+`Session` its clients use (`docs/ARCHITECTURE.md` §The engine's APIs). The command line is `engine/cli`, which a
+deployment's `main` hands the arguments and its options, and which runs the chat, `engine/chat`; both are clients of
+the public API alone. A deployment no longer passes the chat in `engine.Options`.
+
+Delivers: User interface (the commands as they were; nothing an engineer notices changes).
+
+Done when: package `engine` imports no `flag` package and holds no usage text; both deployments' binaries build on
+`engine/cli`, and `compa <case>` and `compa chat` run in a terminal; no file under `engine/chat` imports `internal/`;
+and the linter fails a change that gives `engine/chat` an import beyond `engine`, `engine/text`, `engine/enginetest`
+and third-party modules.
+
+## 11. Commands a deployment names
+
+Status: done
+
+The answer checks treat a code span that opens with a program and its arguments as an instruction, not a claim. The
+engine names only general-purpose programs; a deployment names its products' CLIs in `checks.commands`
+(`docs/MODEL_API.md` §Answer checks).
+
+Delivers: The companion (the answer checks, with no vendor's tool in the engine).
+
+Done when: `internal/check/statements.go` names no product's program; a span of a program the configuration names is
+not flagged and one it does not name is (`engine.TestCheckSpanCommand`); and a deployment that names its programs
+checks answers as before, shown by its own test.
+
+## 12. A base configuration beneath the deployment's
+
+Status: done
+
+The engine ships a base configuration layer, `internal/config/base.yaml`, beneath a deployment's defaults: the house
+style and the intentions for case comments every deployment starts from. A deployment's defaults keep only what is its
+own; one that names a style or intentions replaces the base's whole (`docs/standards.md` §Config).
+
+Delivers: The companion (drafts by intention, in a house style, for a deployment that names none).
+
+Done when: an engine built with no comments drafts with the base's style and intentions, and one naming its own has
+exactly those (`engine.TestBaseConfigUnderTheDeployment`); and each deployment's effective configuration is the same
+bytes before and after its defaults drop what the base holds.
+
+## 13. One fixture-case format
+
+Status: done
+
+Every test with fixtures keeps its cases in one format the engine defines, and `compa expert check` runs them,
+comparing each result exactly, so an experts repository keeps no runner of its own (`docs/EXPERT_API.md` §Fixture
+cases).
+
+Delivers: Expert packages (experts define their tools declaratively, checked by the engine).
+
+Done when: `compa expert check` runs the cases of both expert repositories' bundles, failing on a result that differs
+(`expertcheck_test.TestCases`), and neither repository has a case runner of its own.
+
+## 14. Routing libraries and versions checked by the engine
+
+Status: done
+
+An experts repository compiles its routing library and checks that a changed package took a new version with the
+engine's own commands, `compa expert routing` and `compa expert versions`, keeping only the data its keys come from
+(`docs/EXPERT_API.md` §Compiling a routing library and checking versions).
+
+Delivers: Expert packages (the routing library maintained with the experts, by the engine's rules).
+
+Done when: a library compiled from a keys file and the manifests reads back by the engine's rules and refuses an alias
+or an unknown key (`expertcheck_test.TestCompileLibrary`, `TestCompileLibraryRefuses`); a stale library and a changed
+package with its version kept fail (`TestRoutingCommand`, `TestVersions`); and no experts repository copies the
+registry's name rule or the version check.

@@ -1,0 +1,70 @@
+# Vertex AI list prices, global endpoint, standard tier, in USD per million
+# tokens. Retrieved by hand from the source below; not maintained
+# automatically, so expect it to lag. Batch, priority and flex tiers are
+# not modelled. Gemini's explicit cache storage, cacheStorage, is per
+# million tokens held per hour, from the page's "Context Cache Storage price
+# for Explicit Caching" table; no invocation reports it, so no estimate of
+# a call includes it.
+#
+# Rates a provider does not bill per token are left out. A category with
+# no rate must be zero or unavailable in the usage, or the call is not
+# priced. Reasoning tokens are billed at the output rate; Claude reports
+# none separately, so its entries carry no reasoning rate.
+version: vertex-global-2026-10-31
+source: https://cloud.google.com/vertex-ai/generative-ai/pricing
+retrieved: "2026-10-31"
+currency: USD
+models:
+  - provider: vertex-gemini
+    model: gemini-3.8-flash
+    prices:
+      - until: "2027-01-01" # introductory pricing
+        rates: {input: 0.75, cacheRead: 0.075, output: 3.75, reasoning: 3.75, cacheStorage: 1.00}
+      - from: "2027-01-01"
+        rates: {input: 1.50, cacheRead: 0.15, output: 7.50, reasoning: 7.50, cacheStorage: 1.00}
+  - provider: vertex-gemini
+    model: gemini-3.5-flash
+    prices:
+      - rates: {input: 1.50, cacheRead: 0.15, output: 9.00, reasoning: 9.00, cacheStorage: 1.00}
+  # Its long-context rates are the same, so it carries none.
+  - provider: vertex-gemini
+    model: gemini-3.5-flash-lite
+    prices:
+      - rates: {input: 0.30, cacheRead: 0.03, output: 2.50, reasoning: 2.50, cacheStorage: 1.00}
+  - provider: vertex-gemini
+    model: gemini-3.1-pro # listed as Gemini 3.1 Pro Preview
+    prices:
+      - rates: {input: 2.00, cacheRead: 0.20, output: 12.00, reasoning: 12.00, cacheStorage: 4.50}
+        longContext: {input: 4.00, cacheRead: 0.40, output: 18.00, reasoning: 18.00, cacheStorage: 4.50}
+  - provider: vertex-gemini
+    model: gemini-2.5-pro
+    prices:
+      - rates: {input: 1.25, cacheRead: 0.125, output: 10.00, reasoning: 10.00, cacheStorage: 4.50}
+        longContext: {input: 2.50, cacheRead: 0.25, output: 15.00, reasoning: 15.00, cacheStorage: 4.50}
+  - provider: vertex-gemini
+    model: gemini-2.5-flash
+    prices:
+      - rates: {input: 0.30, cacheRead: 0.03, output: 2.50, reasoning: 2.50, cacheStorage: 1.00}
+  # Claude cache writes are priced at the five-minute rate; the one-hour
+  # rate is higher and not distinguished in the usage Claude reports.
+  - provider: vertex-anthropic
+    model: claude-haiku-4-5
+    prices:
+      - rates: {input: 1.00, cacheRead: 0.10, cacheWrite: 1.25, output: 5.00}
+  - provider: vertex-anthropic
+    model: claude-sonnet-4-5
+    prices:
+      - rates: {input: 3.00, cacheRead: 0.30, cacheWrite: 3.75, output: 15.00}
+        longContext: {input: 6.00, cacheRead: 0.60, cacheWrite: 7.50, output: 22.50}
+  - provider: vertex-anthropic
+    model: claude-sonnet-4-6
+    prices:
+      - rates: {input: 3.00, cacheRead: 0.30, cacheWrite: 3.75, output: 15.00}
+  - provider: vertex-anthropic
+    model: claude-opus-4-6
+    prices:
+      - rates: {input: 5.00, cacheRead: 0.50, cacheWrite: 6.25, output: 25.00}
+  - provider: vertex-anthropic
+    model: claude-opus-4-8
+    prices:
+      - rates: {input: 5.00, cacheRead: 0.50, cacheWrite: 6.25, output: 25.00}

@@ -1,0 +1,11 @@
+apiVersion: compa.lowmag.cc/expert/v1alpha2
+kind: Tests
+tests:
+  - id: attachments.files
+    version: 0.1.0
+    description: Resource files the capture holds, one per line.
+    run:
+      - find: {path: cluster-scoped-resources, glob: '*.yaml'}
+    output: {format: lines}
+    interpret: analyst.md#files
+    fixtures: fixtures/files

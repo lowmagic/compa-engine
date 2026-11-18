@@ -1,0 +1,34 @@
+schema: compa.lowmag.cc/expert/check/v1alpha2
+engine_api: 0.1.1
+roots: [experts, catalogs]
+packages:
+  - kind: catalog
+    id: fixture.core
+    version: 0.1.1
+    digest: sha256:0000000000000000000000000000000000000000000000000000000000000000
+    dir: catalogs/core
+    usable: true
+    tests: [fixture.core.pods]
+    cases:
+      run: 3
+      failures:
+        - {tool: fixture.core.pods, case: one namespace, problem: 'status ok, want unavailable'}
+        - {tool: fixture.core.pods, problem: 'fixtures/pods/cases.yaml: no such file'}
+    warnings: []
+  - kind: expert
+    id: fixture.storage
+    version: 0.1.0
+    digest: sha256:1111111111111111111111111111111111111111111111111111111111111111
+    dir: experts/storage
+    usable: true
+    tests: [storage.node_files]
+    catalogs:
+      - {id: fixture.core, range: '>=0.1.0 <0.2.0', version: 0.1.1, tools: [fixture.core.pods]}
+      - {id: fixture.net, range: '>=0.1.0 <0.2.0', tools: [], unmet: catalog fixture.net is not installed}
+    cases: {run: 0, failures: []}
+    warnings: ['expert fixture.storage 0.1.0: catalog fixture.net is not installed']
+failed:
+  - {dir: experts/broken, problems: ['expert.yaml: missing']}
+errors: []
+warnings: []
+totals: {packages: 2, errors: 3, warnings: 1, cases: 3}

@@ -1,0 +1,95 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://compa.lowmag.cc/expert/check/v1alpha2",
+  "title": "Expert package check report (compa expert check --json)",
+  "description": "What the engine's loader found in the expert and catalog packages under the roots checked, and what each package's fixture cases returned. Packages are sorted by kind, ID and version, failures by directory.",
+  "type": "object",
+  "required": ["schema", "engine_api", "roots", "packages", "failed", "errors", "warnings", "totals"],
+  "additionalProperties": false,
+  "properties": {
+    "schema": {"const": "compa.lowmag.cc/expert/check/v1alpha2"},
+    "engine_api": {"type": "string", "description": "The Expert API version of the engine that checked."},
+    "roots": {"type": "array", "items": {"type": "string"}},
+    "packages": {"type": "array", "items": {"$ref": "#/$defs/package"}},
+    "failed": {
+      "description": "Packages that did not load, by directory, with every problem found.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["dir", "problems"],
+        "additionalProperties": false,
+        "properties": {
+          "dir": {"type": "string"},
+          "problems": {"type": "array", "minItems": 1, "items": {"type": "string"}}
+        }
+      }
+    },
+    "errors": {"description": "Errors not confined to one package's content: missing roots, duplicates, ID clashes.", "type": "array", "items": {"type": "string"}},
+    "warnings": {"description": "Warnings about roots and precedence.", "type": "array", "items": {"type": "string"}},
+    "totals": {
+      "description": "Errors count failed packages, the errors above and every case failure; warnings count every package's warnings and the warnings above; cases count the fixture cases run.",
+      "type": "object",
+      "required": ["packages", "errors", "warnings", "cases"],
+      "additionalProperties": false,
+      "properties": {
+        "packages": {"type": "integer", "minimum": 0},
+        "errors": {"type": "integer", "minimum": 0},
+        "warnings": {"type": "integer", "minimum": 0},
+        "cases": {"type": "integer", "minimum": 0}
+      }
+    }
+  },
+  "$defs": {
+    "package": {
+      "type": "object",
+      "required": ["kind", "id", "version", "digest", "dir", "usable", "tests", "cases", "warnings"],
+      "additionalProperties": false,
+      "properties": {
+        "kind": {"enum": ["catalog", "expert"]},
+        "id": {"type": "string"},
+        "version": {"type": "string"},
+        "digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "dir": {"type": "string"},
+        "usable": {"type": "boolean", "description": "False when an error elsewhere, such as a duplicate or an ID clash, keeps the package from being used. Its cases are not run."},
+        "tests": {"description": "The package's own tests, or a catalog's tools, by ID.", "type": "array", "items": {"type": "string"}},
+        "catalogs": {"description": "An expert's catalog dependencies, as it resolves against the roots checked.", "type": "array", "items": {"$ref": "#/$defs/catalog"}},
+        "cases": {"$ref": "#/$defs/cases"},
+        "warnings": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "catalog": {
+      "type": "object",
+      "required": ["id", "range", "tools"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {"type": "string"},
+        "range": {"type": "string"},
+        "version": {"type": "string", "description": "The version resolved; absent when none is in range."},
+        "tools": {"description": "The tools offered, by full ID.", "type": "array", "items": {"type": "string"}},
+        "unmet": {"type": "string", "description": "What is unmet, when any listed tool is not offered."}
+      }
+    },
+    "cases": {
+      "description": "The package's fixture cases: how many ran, and each failure.",
+      "type": "object",
+      "required": ["run", "failures"],
+      "additionalProperties": false,
+      "properties": {
+        "run": {"type": "integer", "minimum": 0},
+        "failures": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["tool", "problem"],
+            "additionalProperties": false,
+            "properties": {
+              "tool": {"type": "string"},
+              "case": {"type": "string", "description": "The case's name; absent where the cases file as a whole could not be run."},
+              "problem": {"type": "string"}
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,28 @@
+apiVersion: compa.lowmag.cc/config/v1alpha1
+kind: Config
+experts:
+  bundled: /opt/compa/experts
+  local: [~/src/compa-experts/experts]
+  snapshots: .compa/experts
+routingLibrary: /opt/compa/experts/routing/library.yaml
+companion:
+  supportName: Example Support
+  house: |
+    Support is Example Support.
+
+    - Articles are in the Example knowledge base.
+collection:
+  allowlist:
+    omc: {path: /usr/local/bin/omc}
+    awk: {path: /usr/bin/awk, deny: [--sandbox-off]}
+  limits: {outputBytes: 1048576, timeoutSeconds: 60}
+reasoning:
+  maxEgressClass: external_provider
+  vertex: {project: example-project, location: global}
+  openai: {baseURL: "https://inference.example.com/v1", apiKeyEnv: EXAMPLE_API_KEY, egressClass: internal_network, cacheMarks: true}
+  models:
+    gemini-3.8-flash: {provider: vertex-gemini, model: gemini-3.8-flash}
+    local-model: {provider: openai, model: example/local-model, efforts: [low, high]}
+  profiles:
+    companion: {model: gemini-3.8-flash}
+storage: {homeRetentionDays: 14}
