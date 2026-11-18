@@ -66,7 +66,8 @@ func TestAskPreparesTheCase(t *testing.T) {
 // editor's check found that the answer does not show — a finding left
 // uncorrected with the most the lines justify; a revision that failed,
 // the answer as written printed, with the anchor it was asked to fulfil —
-// and in a note what became of the answer. Synthetic scripts.
+// and in a note what became of the answer; and each finding for reading
+// with the statement holding it. Synthetic scripts.
 func TestAskPrintsTheCheck(t *testing.T) {
 	for _, c := range []struct {
 		name, answer, revise, findings string
@@ -79,6 +80,11 @@ func TestAskPrintsTheCheck(t *testing.T) {
 			`{"statement": "s1", "kind": "misattributed", "quote": "The operator restarted the DNS pods", "why": "who saw it is not given", "suggested": "name who said it, or mark it inferred", "anchor": true}`,
 			[]string{"The operator restarted the DNS pods.\n\n", "! the revision failed: companion: the model called a tool where it was asked to answer; the answer as written is printed\n",
 				`asked of the revision: s1 [misattributed] "The operator restarted the DNS pods" → name who said it, or mark it inferred` + "\n"}},
+		{"for reading", "The DNS pods likely restarted after the upgrade. Run `journalctl -u kubelet` on worker-1.", `{"text": "unused"}`,
+			`{"statement": "s1", "kind": "unsupported", "quote": "likely restarted", "why": "the lines show no restart", "suggested": "the DNS pods are running"}`,
+			[]string{"The DNS pods likely restarted after the upgrade. Run `journalctl -u kubelet` on worker-1.\n\n",
+				`· causal wording in the model's own voice: "likely" · names a cause or a likelihood in the model's own voice, not a named source's` + "\n  in: The DNS pods likely restarted after the upgrade.\n",
+				"· a command found in no evidence or guidance: `journalctl -u kubelet` · `journalctl` is on no line of the evidence this conversation saw or of the guidance of an expert it loaded\n  in: Run `journalctl -u kubelet` on worker-1.\n"}},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			e := newEnv(t)

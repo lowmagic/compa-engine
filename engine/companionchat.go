@@ -44,8 +44,13 @@ type CompanionModel struct {
 	Name, Effort, Source string
 }
 
-// analyzeAsk is the engine's words for /analyze.
-const analyzeAsk = "Give a structured analysis of the case now: the structured analysis your instructions describe."
+// analyzeAsk is the engine's words for /analyze; analyzeAskBefore were
+// its words before the observations report, which stored conversations
+// hold.
+const (
+	analyzeAsk       = "Give an observations report on the case now: the observations report your instructions describe."
+	analyzeAskBefore = "Give a structured analysis of the case now: the structured analysis your instructions describe."
+)
 
 // profile is the model the session's calls use: the engineer's choice
 // where they made one, else the companion's profile.
@@ -96,7 +101,7 @@ func (s *Session) ChooseCompanionModel(name, effort string) error {
 	return nil
 }
 
-// Analyze asks for a structured analysis of the case.
+// Analyze asks for an observations report on the case.
 func (s *Session) Analyze(ctx context.Context, on func(TalkEvent)) (TalkReply, error) {
 	return s.turn(ctx, companion.KindEngine, analyzeAsk, 0, on)
 }

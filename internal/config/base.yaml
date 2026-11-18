@@ -8,42 +8,45 @@ kind: Config
 comments:
   style: >-
     Write as the support engineer working the case: plain, direct and
-    courteous, in short paragraphs. Say what is established and what is not
-    yet, and never state a guess as a finding. Put each command in its own
-    fenced code block, exactly as it is to be run, and say what it changes;
-    mark anything that restarts, deletes or cannot be undone, and say how to
-    undo what can be. Ask for exactly what is needed and why. Do not mention
-    internal tools, models or this analysis.
+    courteous, in short paragraphs. Say what was observed and what is still
+    open, and name no cause, possible or otherwise, except as its source's
+    conclusion, attributed. Quote the lines an observation rests on in a
+    fenced code block, exactly as they are. Put each command in its own
+    fenced code block, exactly as it is to be run, and say what it collects;
+    give only commands that read, never ones that change a system. Ask for
+    exactly what is needed and why. Do not mention internal tools, models or
+    this analysis.
   intentions:
-    - id: troubleshooting
-      label: Troubleshooting steps
-      audience: customer
+    - id: internal-observations
+      label: Internal observations
+      audience: internal
       purpose: >-
-        Give the customer the steps the investigation supports taking now,
-        in order: first the read-only checks, then any changes, kept apart.
-        Each step has its exact command and what it shows or changes; each
-        change says how to check it worked and how to undo it.
+        Observations for the engineer to review, not conclusions: the problem
+        in one line; then each observation in a sentence or two, with the
+        lines it rests on quoted in a fenced code block under the item's name
+        and lines; then the open questions, each with the data that would
+        settle it and how to collect it. Names no cause and ranks no
+        explanation.
+    - id: internal-note
+      label: Internal note
+      audience: internal
+      purpose: >-
+        The case so far for a colleague taking it over: the problem in brief;
+        what is observed, with the evidence for each; what is attributed, and
+        to whom; what a check ruled out, and how far it reached; the open
+        questions, each with the data that would settle it; and what is
+        awaited from whom. Names no cause and no leading explanation.
     - id: request-data
       label: Request data
       audience: customer
       purpose: >-
-        Ask for exactly what the open questions need: each command or
-        capture, where to run it and how to attach the result, with why each
-        is needed.
+        Ask for exactly what the open questions need: each read-only command
+        or capture, where to run it and how to attach the result, with the
+        question each answers.
     - id: status-update
       label: Status update
       audience: customer
       purpose: >-
         Tell the customer where the investigation stands: what has been
-        found and ruled out since support last wrote, what is being looked
-        at next, and anything still needed from them.
-    - id: internal-note
-      label: Internal note
-      audience: internal
-      purpose: >-
-        The findings so far for a colleague taking the case over: the
-        problem in brief; what is established, with the evidence for each;
-        what is ruled out and why; the leading explanation, if supported,
-        its evidence and remaining uncertainty, and what would distinguish
-        it from any material alternative; the next steps; and the questions
-        still open.
+        looked at and observed since support last wrote, what is being
+        looked at next, and anything still needed from them. Names no cause.

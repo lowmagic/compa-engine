@@ -3,6 +3,7 @@ package engine
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -14,6 +15,8 @@ import (
 
 	"github.com/lowmagic/compa-engine/engine/text"
 	"github.com/lowmagic/compa-engine/internal/check"
+	"github.com/lowmagic/compa-engine/internal/companion"
+	"github.com/lowmagic/compa-engine/internal/expert"
 )
 
 // The epistemic checks' deterministic part: a text split into
@@ -35,8 +38,9 @@ type CheckStatement struct {
 type AnswerFlag struct {
 	What, Why string
 	// Span is a span flag's code span as written, and Statement the first
-	// statement of the answer holding it, as the answer shows it; both are
-	// empty for a citation's form.
+	// statement of the answer holding it, as the answer shows it; Span is
+	// empty for a finding for reading, and Statement too for a citation's
+	// form.
 	Span, Statement string
 	// Closest is, for a span flag, the line of the evidence the search read
 	// sharing the most words with the span, at least half of them, which
@@ -47,7 +51,23 @@ type AnswerFlag struct {
 	// searched for, and found not to hold (arithmetic): incorrect, the
 	// engine's own verdict, which the engineer may override.
 	Arithmetic bool
+	// Finding is what a finding for reading beside a citation's form is,
+	// FindingCausal or FindingCommand, Statement the statement holding it;
+	// empty for a citation's form and a span flag.
+	Finding string
 }
+
+// The findings for reading the deterministic checks make beside a
+// citation's form (AnswerFlag.Finding), as the engineer is shown them:
+// causal wording in the model's own voice (check.CausalTerms), and a
+// command line whose program or options no line of the evidence the
+// conversation saw or of a loaded expert's guidance holds
+// (check.CommandLines). Neither takes a verdict, and neither changes the
+// answer or is given its editor.
+const (
+	FindingCausal  = "causal wording in the model's own voice"
+	FindingCommand = "a command found in no evidence or guidance"
+)
 
 // Unsupported says whether the flag is a span searched for and found
 // nowhere, no line of the evidence read close to it.
@@ -257,15 +277,24 @@ func citesSource(cs []Cite) bool {
 // (arithmetic) is evaluated instead, flagged incorrect where it does not
 // hold. A span flag names the first statement holding the span, or the
 // statement presenting the block, and the line of the evidence read
-// closest to it, found in the same pass. Where the span check fails, the
-// citation forms and the arithmetic are still returned, with its error.
+// closest to it, found in the same pass. Then the findings for reading,
+// each naming its statement: each statement's causal wording in the
+// model's own voice (check.CausalTerms), and each command line
+// (check.CommandLines) whose program or options no one line of the
+// evidence read in that pass, or of the guidance of an expert the
+// conversation loaded, holds. Where the span check fails, the citation
+// forms, the arithmetic and the causal wording are still returned, with
+// its error.
 func (s *Session) AnswerFlags(ctx context.Context, texts []string) ([][]AnswerFlag, error) {
 	return s.answerFlags(ctx, texts, spanBudget)
 }
 
 // arithmeticWrong is why a span of arithmetic that does not hold is
-// flagged.
-const arithmeticWrong = "incorrect: the arithmetic does not hold"
+// flagged; causalWhy why causal wording is.
+const (
+	arithmeticWrong = "incorrect: the arithmetic does not hold"
+	causalWhy       = "names a cause or a likelihood in the model's own voice, not a named source's"
+)
 
 func (s *Session) answerFlags(ctx context.Context, texts []string, b spanReads) ([][]AnswerFlag, error) {
 	x, err := s.exposure(ctx)
@@ -282,10 +311,17 @@ func (s *Session) answerFlags(ctx context.Context, texts []string, b spanReads) 
 	spans := make([][]spanAt, len(texts))
 	var all []string
 	out := make([][]AnswerFlag, len(texts))
+	statements := make([][]CheckStatement, len(texts))
+	// cmdAt are, by text, its command lines' places in cmds, each line
+	// searched for once for all the texts.
+	cmdAt := make([][]int, len(texts))
+	var cmds []check.CommandLine
+	cited := func(st string) bool { return citesSource(Cites(st)) }
 	commands := check.Commands(s.e.config.Checks.Commands)
 	for i, t := range texts {
 		out[i] = citeForms(t, x.shown)
-		for _, st := range statementsOf(t) {
+		statements[i] = statementsOf(t)
+		for _, st := range statements[i] {
 			// A condition's values are what it supposes, not what was
 			// seen.
 			if check.Conditional(st.Text) {
@@ -327,8 +363,27 @@ func (s *Session) answerFlags(ctx context.Context, texts []string, b spanReads) 
 				}
 			}
 		}
+		for _, c := range commands.CommandLines(t, cited) {
+			k := slices.IndexFunc(cmds, func(d check.CommandLine) bool { return d.Line == c.Line })
+			if k < 0 {
+				k = len(cmds)
+				cmds = append(cmds, c)
+			}
+			cmdAt[i] = append(cmdAt[i], k)
+		}
 	}
-	found, err := s.unseenSpans(ctx, all, x, b)
+	cs := newCommandSearch(cmds)
+	var guideErr error
+	if len(cmds) > 0 {
+		var guidance []string
+		if guidance, guideErr = s.loadedGuidance(ctx); guideErr != nil {
+			cs = nil
+		}
+		for _, g := range guidance {
+			cs.read([]byte(g))
+		}
+	}
+	found, err := s.unseenSpans(ctx, all, cs, x, b)
 	why := found.why(b)
 	for i := range texts {
 		for _, a := range spans[i] {
@@ -340,8 +395,143 @@ func (s *Session) answerFlags(ctx context.Context, texts []string, b spanReads) 
 					Closest: closestOf(found.closest[a.span], a.st.Cites)})
 			}
 		}
+		for _, st := range statements[i] {
+			if terms := check.CausalTerms(st.Text); len(terms) > 0 {
+				quoted := make([]string, len(terms))
+				for k, w := range terms {
+					quoted[k] = strconv.Quote(w)
+				}
+				out[i] = append(out[i], AnswerFlag{What: strings.Join(quoted, ", "), Why: causalWhy, Statement: st.Text, Finding: FindingCausal})
+			}
+		}
+		if err != nil || cs == nil {
+			continue
+		}
+		for _, k := range cmdAt[i] {
+			if w := cs.why(k); w != "" {
+				out[i] = append(out[i], AnswerFlag{What: codeQuote(cmds[k].Line), Why: w + found.cutWords(b), Statement: cmds[k].Statement.Text, Finding: FindingCommand})
+			}
+		}
 	}
-	return out, err
+	return out, errors.Join(guideErr, err)
+}
+
+// commandSearch looks for command lines on the lines read: lacks are, by
+// command line, what of it the line read lacking least of it lacks
+// (check.CommandLine.Missing), the program alone where no line holds it,
+// and nothing once one line holds the program and every option.
+type commandSearch struct {
+	cmds  []check.CommandLine
+	lacks [][]string
+}
+
+func newCommandSearch(cmds []check.CommandLine) *commandSearch {
+	cs := &commandSearch{cmds: cmds, lacks: make([][]string, len(cmds))}
+	for k, c := range cmds {
+		cs.lacks[k] = []string{c.Program}
+	}
+	return cs
+}
+
+// done says no command line is left to look for; nil looks for none.
+func (cs *commandSearch) done() bool {
+	return cs == nil || !slices.ContainsFunc(cs.lacks, func(l []string) bool { return len(l) > 0 })
+}
+
+// read takes the lines of data.
+func (cs *commandSearch) read(data []byte) {
+	if cs == nil {
+		return
+	}
+	for k, c := range cs.cmds {
+		program := []byte(c.Program)
+		if len(cs.lacks[k]) == 0 || !bytes.Contains(data, program) {
+			continue
+		}
+		for rest := data; len(rest) > 0 && len(cs.lacks[k]) > 0; {
+			var line []byte
+			line, rest, _ = bytes.Cut(rest, []byte("\n"))
+			if !bytes.Contains(line, program) {
+				continue
+			}
+			if m := c.Missing(string(line)); cs.short(k, m) < cs.short(k, cs.lacks[k]) {
+				cs.lacks[k] = m
+			}
+		}
+	}
+}
+
+// short is how far what a line lacks of command line k is from all of
+// it: the options it lacks, or one past every option where it lacks the
+// program.
+func (cs *commandSearch) short(k int, lacks []string) int {
+	if len(lacks) == 1 && lacks[0] == cs.cmds[k].Program {
+		return len(cs.cmds[k].Options) + 1
+	}
+	return len(lacks)
+}
+
+// why is why command line k is flagged, naming what of it no line read
+// holds; empty where one line holds it all.
+func (cs *commandSearch) why(k int) string {
+	lacks, c := cs.lacks[k], cs.cmds[k]
+	if len(lacks) == 0 {
+		return ""
+	}
+	const where = "of the evidence this conversation saw or of the guidance of an expert it loaded"
+	if cs.short(k, lacks) > len(c.Options) {
+		return codeQuote(c.Program) + " is on no line " + where
+	}
+	quoted := make([]string, len(lacks))
+	for i, o := range lacks {
+		quoted[i] = codeQuote(o)
+	}
+	names, verb := quoted[0], "is"
+	if n := len(quoted); n > 1 {
+		names, verb = strings.Join(quoted[:n-1], ", ")+" and "+quoted[n-1], "are"
+	}
+	return names + " " + verb + " on no line with " + codeQuote(c.Program) + " " + where
+}
+
+// loadedGuidance is the guidance of each expert the case's current
+// conversation, or one it was compacted from, loaded, as load_expert gave
+// it (expertGuidance), each pin once: the experts it loaded, not those
+// its consults were given.
+func (s *Session) loadedGuidance(ctx context.Context) ([]string, error) {
+	st := companion.Store{DB: s.c.st.DB()}
+	conv, err := st.Latest(ctx)
+	if errors.Is(err, companion.ErrNoConversation) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	k := toolkit{e: s.e, c: s.c}
+	var seen []expert.Pin
+	var out []string
+	for c := conv; ; {
+		for _, raw := range c.Pins {
+			var p expert.Pin
+			if err := json.Unmarshal(raw, &p); err != nil {
+				return nil, err
+			}
+			if slices.ContainsFunc(seen, func(q expert.Pin) bool { return q.ID == p.ID && q.Version == p.Version && q.Digest == p.Digest }) {
+				continue
+			}
+			seen = append(seen, p)
+			r, _, err := s.e.experts().idx.Pinned(p, s.e.snapshots(s.c))
+			if err != nil {
+				return nil, err
+			}
+			out = append(out, k.expertGuidance(r, nil))
+		}
+		if c.CompactedFrom == "" {
+			return out, nil
+		}
+		if c, err = st.Conversation(ctx, c.CompactedFrom); err != nil {
+			return nil, err
+		}
+	}
 }
 
 // closestOf is the closest line among lines, each the first line of an
@@ -388,7 +578,13 @@ type spanSearch struct {
 
 // why is a span flag's reason, saying what of the evidence went unread.
 func (f spanSearch) why(b spanReads) string {
-	w := "in no evidence this conversation saw"
+	return "in no evidence this conversation saw" + f.cutWords(b)
+}
+
+// cutWords say what of the evidence the search went without reading,
+// after a flag's reason: nothing where it read every line shown.
+func (f spanSearch) cutWords(b spanReads) string {
+	var w string
 	if f.cut > 0 {
 		w += fmt.Sprintf(", %s of it read only to the first %s", text.Plural(f.cut, "item"), sizeWords(b.Item))
 	}
@@ -406,22 +602,23 @@ func sizeWords(n int) string {
 	return text.Plural(n, "byte")
 }
 
-// unseenSpans looks for each span in the lines of the evidence the
-// conversation was shown (exposure) — an item carried whole, or named
-// where the exposure is unknown, read whole, any other only at the lines
-// carried, the rest of it read as empty lines — but what the engineer's
-// rules leave out of what models read, in name order, each item read to
-// its first b.Item bytes and b.Total over all, until every span is found
-// or the total is spent; for each span still unseen after an item, the
-// shown lines closest to it are found as it is read (nearest). An item is
+// unseenSpans looks for each span, and for the command lines cmds looks
+// for, in the lines of the evidence the conversation was shown (exposure)
+// — an item carried whole, or named where the exposure is unknown, read
+// whole, any other only at the lines carried, the rest of it read as
+// empty lines — but what the engineer's rules leave out of what models
+// read, in name order, each item read to its first b.Item bytes and
+// b.Total over all, until every span and command line is found or the
+// total is spent; for each span still unseen after an item, the shown
+// lines closest to it are found as it is read (nearest). An item is
 // counted as read only to the per-item bound where a line it was shown
 // lies past it.
-func (s *Session) unseenSpans(ctx context.Context, spans []string, x exposure, b spanReads) (spanSearch, error) {
+func (s *Session) unseenSpans(ctx context.Context, spans []string, cmds *commandSearch, x exposure, b spanReads) (spanSearch, error) {
 	found := spanSearch{unseen: map[string]bool{}, closest: map[string][]EvidenceLine{}}
 	for _, sp := range spans {
 		found.unseen[sp] = true
 	}
-	if len(spans) == 0 {
+	if len(spans) == 0 && cmds.done() {
 		return found, nil
 	}
 	left := withdrawn(s.c)
@@ -507,7 +704,8 @@ func (s *Session) unseenSpans(ctx context.Context, spans []string, x exposure, b
 			}
 			near.read(idNames[i], data, lower, found.unseen)
 		}
-		if len(found.unseen) == 0 || found.unread > 0 {
+		cmds.read(data)
+		if len(found.unseen) == 0 && cmds.done() || found.unread > 0 {
 			break
 		}
 	}
@@ -1243,7 +1441,11 @@ func (s *Session) checkRequest(ctx context.Context, role check.Role, head string
 		}
 	}
 	for _, f := range c.Flags {
-		note("%s is %s.", f.What, f.Why)
+		// A finding for reading is the engineer's, not the checker's to
+		// correct: the certainty candidate gives the checker causal wording.
+		if f.Finding == "" {
+			note("%s is %s.", f.What, f.Why)
+		}
 	}
 	for _, u := range c.Unresolved {
 		note("%s", u)

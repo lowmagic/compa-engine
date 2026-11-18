@@ -1464,8 +1464,9 @@ func benchDetails(all [][]benchRun) string {
 // expert's hedged answer as a model's reading; every citation of a1, a2,
 // a3 and a4 resolves; and the engine's own checks flag no span of a1, of
 // the control, a3, or of a4, and in a2 only those of shape 3's alert
-// rule. a4's review given the ranked evidence quotes the lines that
-// contradict its shape 17, which the review without it does not.
+// rule, the causal wording they find being a2's and the control's. a4's
+// review given the ranked evidence quotes the lines that contradict its
+// shape 17, which the review without it does not.
 func TestCheckReplayBench(t *testing.T) {
 	benchSplits(t)
 	for _, ss := range [][]benchStatement{benchA1, benchA2, benchA3, benchA4} {
@@ -1523,6 +1524,7 @@ func TestCheckReplayBench(t *testing.T) {
 			alert = st.text
 		}
 	}
+	var causal []string
 	for i, a := range answers {
 		if strings.TrimSpace(a.text) != strings.TrimSpace(m.fill(benchText(want[i]))) {
 			t.Errorf("answer %d is\n%s", i+1, a.text)
@@ -1536,6 +1538,10 @@ func TestCheckReplayBench(t *testing.T) {
 		}
 		spans := 0
 		for _, f := range c.Flags {
+			if f.Finding == FindingCausal {
+				causal = append(causal, "a"+strconv.Itoa(i+1)+" "+f.What)
+				continue
+			}
 			if i != 1 || f.Span == "" || f.Statement != alert {
 				t.Errorf("a%d flagged %s: %s, in %q", i+1, f.What, f.Why, f.Statement)
 			}
@@ -1544,6 +1550,11 @@ func TestCheckReplayBench(t *testing.T) {
 		if i == 1 && spans == 0 {
 			t.Error("a2's alert rule is not flagged")
 		}
+	}
+	// The control's root cause is the solution's, but not directly after
+	// it: causal wording a reading tells apart.
+	if want := []string{`a2 "caused"`, `a3 "root cause"`}; !slices.Equal(causal, want) {
+		t.Errorf("causal wording %q; want %q", causal, want)
 	}
 	plain, err := s.ReviewRequest(ctx, ReviewAsk{})
 	if err != nil {

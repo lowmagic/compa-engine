@@ -207,3 +207,109 @@ func TestCertaintyTerms(t *testing.T) {
 		}
 	}
 }
+
+// TestCausalTerms: a statement's causal and likelihood terms in its own
+// voice, outside its code spans, in order and once each; none directly
+// after a named source or its verb of saying — a named source's
+// conclusion — and none in a question or a statement opening as a
+// condition, which assert no cause.
+func TestCausalTerms(t *testing.T) {
+	for text, want := range map[string][]string{
+		"The OSD shutdown led to the disk filling, likely due to the full /var.":         {"led to", "likely", "due to"},
+		"The root cause is the full /var; it caused the eviction and is the culprit.":    {"root cause", "caused", "culprit"},
+		"Root-cause: the upgrade triggered a restart, which resulted in the outage.":     {"root-cause", "triggered", "resulted in"},
+		"Probably the plugin contributed to it, and it is causing retries, PROBABLY.":    {"probably", "contributed", "causing"},
+		"The cause is open; two causes remain, and one leads to the other.":              {"cause", "causes", "leads to"},
+		"The controller logged `likely caused by x`, an unlikely value.":                 nil,
+		"The pods restarted because the node rebooted.":                                  nil,
+		"Is the upgrade the cause?":                                                      nil,
+		"If the socket was removed, that caused the crash.":                              nil,
+		"Engineering concluded the root cause is the full /var.":                         nil,
+		"The vendor likely shipped the fix in 4.16.3.":                                   nil,
+		"The customer reports it caused the outage.":                                     nil,
+		"The engineer said the restart caused it.":                                       {"caused"},
+		"The kubelet's eviction manager ranked the pod for eviction [e3:2] at 08:10:02.": nil,
+	} {
+		if d := cmp.Diff(want, check.CausalTerms(text)); d != "" {
+			t.Errorf("CausalTerms(%q) (-want +got):\n%s", text, d)
+		}
+	}
+}
+
+// TestCommandLines: a text's command lines are its code spans that are
+// command lines, every line of a shell's block and the command lines of a
+// bare block not presented as output, each once, a prompt and a leading
+// sudo taken off, a continued line joined, a comment or blank line
+// skipped, under the statement holding or presenting it; a value, a
+// block of text and a bare block presented as output after a statement
+// citing evidence give none. Its program and options are looked for, an
+// option's value taken off, its other words not; a line holds it where
+// the program and every option stand as words on it.
+func TestCommandLines(t *testing.T) {
+	text := strings.Join([]string{
+		"Run `journalctl -u kubelet --since \"2 hours ago\"` and `sudo systemctl status kubelet`, then compare. The value `172.30.0.10` is no command.",
+		"",
+		"```sh",
+		"$ sudo oc adm top nodes --sort-by=cpu \\",
+		"    --no-headers",
+		"# check the pods",
+		"",
+		"# ls -l /var/log",
+		"fooctl --x=1 -- -a",
+		"```",
+		"",
+		"To check it:",
+		"",
+		"```",
+		"dig +short kubernetes.default",
+		"not a command",
+		"```",
+		"",
+		"The kubelet logged [e3:4]:",
+		"",
+		"```",
+		"sudo journalctl -u kubelet",
+		"```",
+		"",
+		"```text",
+		"ls -la /var",
+		"```",
+		"",
+		"The node shows [e3:5]:",
+		"",
+		"```",
+		"ls -l /var",
+		"```",
+		"",
+		"Again, `journalctl -u kubelet --since \"2 hours ago\"`.",
+	}, "\n")
+	var got []string
+	for _, c := range (check.Commands{"oc"}).CommandLines(text, func(s string) bool { return strings.Contains(s, "[e") }) {
+		got = append(got, c.Statement.ID+" "+c.Line+" | "+c.Program+" "+strings.Join(c.Options, " "))
+	}
+	want := []string{
+		`s1 journalctl -u kubelet --since "2 hours ago" | journalctl -u --since`,
+		"s1 systemctl status kubelet | systemctl ",
+		"s2 oc adm top nodes --sort-by=cpu --no-headers | oc --sort-by --no-headers",
+		"s2 ls -l /var/log | ls -l",
+		"s2 fooctl --x=1 -- -a | fooctl --x -a",
+		"s3 dig +short kubernetes.default | dig ",
+		"s5 ls -l /var | ls -l",
+	}
+	if d := cmp.Diff(want, got); d != "" {
+		t.Errorf("command lines (-want +got):\n%s", d)
+	}
+	c := check.CommandLine{Program: "df", Options: []string{"-h", "--output"}}
+	for line, want := range map[string][]string{
+		"# df -h on worker-1, collected 2026-10-20":  {"--output"},
+		"df -h --output=source /var":                 nil,
+		"run /usr/bin/df --output -h, then compare.": nil,
+		"dfx -h --output":                            {"df"},
+		"df --output-format -h":                      {"--output"},
+		"df":                                         {"-h", "--output"},
+	} {
+		if d := cmp.Diff(want, c.Missing(line)); d != "" {
+			t.Errorf("Missing(%q) (-want +got):\n%s", line, d)
+		}
+	}
+}

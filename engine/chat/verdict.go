@@ -86,13 +86,15 @@ func (v checkValue) shown() string {
 // (about), as the tab lists it (what), and why. A citation has written,
 // as the answer writes it; the editor's finding its statement, kind and
 // the words at fault (quote), and the most the evidence supports
-// (atMost), or, for an anchor, what fulfils it (asked). lines are the
-// items' lines it cites, From 0 for an item cited whole.
+// (atMost), or, for an anchor, what fulfils it (asked); causal wording and
+// a command the statement holding it (claim). lines are the items' lines
+// it cites, From 0 for an item cited whole.
 type reading struct {
 	about, what, why       string
 	written                string
 	statement, kind, quote string
 	atMost, asked          string
+	claim                  string
 	lines                  []engine.EvidenceRange
 }
 
@@ -107,14 +109,16 @@ const (
 
 // readings are an answer's findings that take no verdict, each once, in
 // the order they were printed beneath it before the checks tab held them:
-// its citations flagged, those not in the form read, the editor's findings
-// it wrote no correction for and the citations the revision added
+// its citations flagged, those not in the form read, its causal wording
+// and its commands found in no evidence or guidance (engine.AnswerFlag's
+// Finding, which names them), the editor's findings it wrote no
+// correction for and the citations the revision added
 // (engine.AnswerCheck.Notes).
 func readings(cites []engine.Cite, checks []engine.CiteCheck, flags []engine.AnswerFlag, c engine.AnswerCheck) []reading {
 	var out []reading
 	seen := map[string]bool{}
 	add := func(r reading) {
-		if k := r.about + "\x00" + r.what + "\x00" + r.why; !seen[k] {
+		if k := r.about + "\x00" + r.what + "\x00" + r.why + "\x00" + r.claim; !seen[k] {
 			seen[k] = true
 			out = append(out, r)
 		}
@@ -130,7 +134,11 @@ func readings(cites []engine.Cite, checks []engine.CiteCheck, flags []engine.Ans
 		add(reading{about: aboutCiteFlagged, what: citeName(ct), why: why, written: ct.Text, lines: citedLines([]engine.Cite{ct})})
 	}
 	for _, f := range flags {
-		if f.Span == "" {
+		switch {
+		case f.Span != "":
+		case f.Finding != "":
+			add(reading{about: f.Finding, what: f.What, why: f.Why, claim: f.Statement})
+		default:
 			add(reading{about: aboutCiteForm, what: f.What, why: f.Why})
 		}
 	}
@@ -858,14 +866,17 @@ func (m *model) valueDetail(v checkValue, w int) []string {
 }
 
 // readingDetail is what the tab shows of a finding for reading: what it
-// is; the citation as written, or the editor's statement, kind and the
-// words at fault; why; the most the evidence supports; that it takes no
-// verdict; and the lines it cites, each with its context, as a value's
-// evidence is shown.
+// is; the citation as written, the statement holding it, or the editor's
+// statement, kind and the words at fault; why; the most the evidence
+// supports; that it takes no verdict; and the lines it cites, each with
+// its context, as a value's evidence is shown.
 func (m *model) readingDetail(r *reading, w int) []string {
 	out := detailField("Finding:", r.about, w, 1)
 	if r.written != "" {
 		out = append(out, detailField("Citation:", detailSafe(r.written), w, 2)...)
+	}
+	if r.claim != "" {
+		out = append(out, detailField("Claim:", detailSafe(r.claim), w, 3)...)
 	}
 	if r.statement != "" {
 		out = append(out, detailField("Statement:", detailSafe(r.statement+" · "+r.kind), w, 1)...)

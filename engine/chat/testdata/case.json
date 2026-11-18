@@ -32,6 +32,12 @@
       ]
     },
     {
+      "when": "check the reading",
+      "answers": [
+        {"text": "The sync likely failed due to the upgrade [e1:2]. Run `journalctl -u ovn-controller --no-pager` on worker-1. Was it the upgrade?"}
+      ]
+    },
+    {
       "when": "cite the ledger",
       "answers": [
         {"text": "It began after the upgrade [l1, e1:2]. A must-gather is owed [l2], as [l9] says."}

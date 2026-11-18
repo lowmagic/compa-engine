@@ -829,7 +829,7 @@ const consultTool = "consult"
 func (k toolkit) consult() companion.Tool {
 	props := map[string]any{
 		"expert":   strProp("The expert's ID, from the expert index."),
-		"question": strProp("The question and the context the expert needs: observations, attributed reports and your hypotheses kept apart; evidence names and lines; the material correction or alternative, if any."),
+		"question": strProp("The question and the context the expert needs: observations, attributed reports and your open questions kept apart; evidence names and lines; the material correction or contradiction, if any."),
 	}
 	return tool{
 		decl: model.Tool{Name: consultTool, Description: "Ask one expert one self-contained question in a conversation of its own, which reads the case and runs tools as it needs; returns its answer, for you to weigh.",

@@ -440,19 +440,31 @@ func TestLedgerItemCitedFlagged(t *testing.T) {
 // without brackets, in parentheses — each with why, and a code span in no
 // evidence the conversation saw; a span the evidence holds and a
 // well-formed citation are not flagged, and an unresolved citation is
-// flagged once. Beneath each answer with findings one line says how many,
-// and beneath one with nothing to flag there is none. A reopened chat
-// shows the same beneath the restored answers, naming /check.
+// flagged once. Causal wording in the model's own voice and a command
+// found in no evidence or guidance are listed for reading, each with the
+// statement holding it, and a question is none. Beneath each answer with
+// findings one line says how many, and beneath one with nothing to flag
+// there is none. A reopened chat shows the same beneath the restored
+// answers, naming /check.
 func TestAnswerFlagsShown(t *testing.T) {
 	s := session(t, "case.json")
 	h := start(t, s, Options{})
 	h.say("check the forms")
 	h.say("which model?")
+	h.say("check the reading")
 	want := []string{
 		"? `no such marker 7f3a` in no evidence this conversation saw",
 		"· e999:3 no evidence e999",
 		"· e1:2 not read as a citation without brackets: write [e1:2]",
 		"· (e1) not read as a citation in parentheses: write [e1]",
+	}
+	reading := []string{
+		`· "likely", "due to" names a cause or a likelihood in the model's own voice, not a named source's`,
+		"· `journalctl -u ovn-controller --no-pager` `journalctl` is on no line of the evidence this conversation saw or of the guidance of an expert it loaded",
+	}
+	claims := []string{
+		engine.FindingCausal + ": The sync likely failed due to the upgrade [e1:2].",
+		engine.FindingCommand + ": Run `journalctl -u ovn-controller --no-pager` on worker-1.",
 	}
 	clean := regexp.MustCompile(`The first model answers\. (.*?)a\d+ · `)
 	for _, run := range []struct {
@@ -460,8 +472,8 @@ func TestAnswerFlagsShown(t *testing.T) {
 		h     *harness
 		lines []string
 	}{
-		{"the turn", h, []string{"⚠ 2 findings to review · f opens the checks tab", "⚠ 4 findings to review · f opens the checks tab"}},
-		{"the reopened chat", start(t, s, Options{NoOpen: true}), []string{"⚠ 2 findings · /check a1 opens them", "⚠ 4 findings · /check a2 opens them"}},
+		{"the turn", h, []string{"⚠ 2 findings to review · f opens the checks tab", "⚠ 4 findings to review · f opens the checks tab", "⚠ 2 findings to review · f opens the checks tab"}},
+		{"the reopened chat", start(t, s, Options{NoOpen: true}), []string{"⚠ 2 findings · /check a1 opens them", "⚠ 4 findings · /check a2 opens them", "⚠ 2 findings · /check a4 opens them"}},
 	} {
 		out := run.h.out()
 		if got := findingLines(out); !slices.Equal(got, run.lines) {
@@ -473,6 +485,20 @@ func TestAnswerFlagsShown(t *testing.T) {
 		checkAt(t, run.h, "a2")
 		if got := tabbed(run.h, "a2"); !slices.Equal(got, want) {
 			t.Errorf("%s lists a2's findings %q; want %q", run.name, got, want)
+		}
+		run.h.press("esc")
+		checkAt(t, run.h, "a4")
+		if got := tabbed(run.h, "a4"); !slices.Equal(got, reading) {
+			t.Errorf("%s lists a4's findings %q; want %q", run.name, got, reading)
+		}
+		var got []string
+		for _, v := range run.h.m.browser.checks.values {
+			if v.label == "a4" && v.read != nil {
+				got = append(got, v.read.about+": "+v.read.claim)
+			}
+		}
+		if !slices.Equal(got, claims) {
+			t.Errorf("%s gives a4's findings the statements %q; want %q", run.name, got, claims)
 		}
 		run.h.press("esc")
 	}

@@ -89,8 +89,8 @@ func (s *Session) Talk(ctx context.Context, message string, on func(TalkEvent)) 
 
 // Orient runs the opening turn, on the opening's budget of tool calls:
 // the case's problem and status, its history from the comments, what is
-// awaited, the explanations it supports, what each attachment can answer,
-// and directions. Where the ledger started by Prepare is still reading,
+// awaited, what each attachment can answer, and the open questions with
+// the data that would answer each. Where the ledger started by Prepare is still reading,
 // the model is told it follows.
 func (s *Session) Orient(ctx context.Context, on func(TalkEvent)) (TalkReply, error) {
 	ask := orientAsk

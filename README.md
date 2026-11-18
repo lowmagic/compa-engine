@@ -1,7 +1,9 @@
 # compa-engine
 
-The engine behind compa, a troubleshooting companion for support cases, as a Go library. An engineer talks to a model
-about a case in one conversation; the engine owns everything around that conversation:
+The engine behind compa, a triage and data-gathering companion for support cases, as a Go library. It does not
+diagnose: it says what a case's data shows, with the evidence, asks what the data leaves open and says what would
+settle it; the engineer draws the conclusions. An engineer talks to a model about a case in one conversation; the
+engine owns everything around that conversation:
 
 - the case, read through a `CaseSource` and an `ArtifactSource` a deployment supplies;
 - collection from the case's artifacts, by deterministic tools run in a sandbox, each result stored as evidence;

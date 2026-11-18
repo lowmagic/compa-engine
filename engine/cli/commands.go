@@ -168,15 +168,35 @@ func (l *commandLine) askOnce(ctx context.Context, id, question string, in io.Re
 	if _, err := fmt.Fprintln(out, strings.TrimSpace(reply.Text)); err != nil {
 		return err
 	}
-	return writeCheck(out, reply.Check)
+	flags, flagErr := s.AnswerFlags(ctx, []string{reply.Text})
+	var answerFlags []engine.AnswerFlag
+	if len(flags) > 0 {
+		answerFlags = flags[0]
+	}
+	return writeCheck(out, reply.Check, answerFlags, flagErr)
 }
 
-// writeCheck writes beneath an answer what the editor's check made of it:
-// its findings left uncorrected, a revision that failed, the anchors a
+// writeCheck writes beneath an answer its findings for reading — its
+// causal wording and its commands found in no evidence or guidance, each
+// with the statement holding it — and why its own checks could not run,
+// where they could not; then what the editor's check made of it: its
+// findings left uncorrected, a revision that failed, the anchors a
 // revision was asked to fulfil, and in one line whether it was corrected,
 // revised or unchecked.
-func writeCheck(out io.Writer, c engine.AnswerCheck) error {
+func writeCheck(out io.Writer, c engine.AnswerCheck, flags []engine.AnswerFlag, flagErr error) error {
 	var b strings.Builder
+	for _, f := range flags {
+		if f.Finding == "" {
+			continue
+		}
+		fmt.Fprintf(&b, "· %s: %s · %s\n", f.Finding, text.Safe(f.What), text.Safe(f.Why))
+		if f.Statement != "" {
+			fmt.Fprintf(&b, "  in: %s\n", text.Safe(f.Statement))
+		}
+	}
+	if flagErr != nil {
+		fmt.Fprintf(&b, "! the answer's own checks could not run: %s\n", text.Safe(flagErr.Error()))
+	}
 	for _, n := range c.Notes() {
 		if n.Kind == engine.NoteWarning {
 			fmt.Fprintf(&b, "! %s\n", n.Text)

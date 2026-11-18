@@ -133,6 +133,6 @@ func catchUpAsk(r ReopenState, comments []string, ledger int) string {
 	case catchUpReading:
 		b.WriteString("; the case ledger is still reading the new comments and follows")
 	}
-	b.WriteString(". Say briefly what changed and whether it changes the current understanding of the case; read further only where something new needs it.")
+	b.WriteString(". Say briefly what changed and whether it answers or opens any question; read further only where something new needs it.")
 	return b.String()
 }

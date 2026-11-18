@@ -92,9 +92,9 @@ transcript is kept and linked to the call that started it. Several consults in o
 **Compaction.** When a call's estimated input passes a configured threshold, 150,000 tokens by default, the turn's
 reply says so and the chat offers `/compact`. `/compact` has the model write a handoff — each material point as
 observed, attributed and to whom, or inferred, cited with the identity and time window it holds for; the strongest
-evidence against each open explanation, and every correction and retraction; what is ruled out, by which check and
-only as far as it reached; evidence missing, truncated or uninspected kept as unknown; the open hypotheses with what
-would discriminate them; what is awaited from whom; the experts loaded; and the engineer's last request — and starts
+evidence against each reading still open, and every correction and retraction; what is ruled out, by which check and
+only as far as it reached; evidence missing, truncated or uninspected kept as unknown; the open questions with the
+data that would settle them; what is awaited from whom; the experts loaded; and the engineer's last request — and starts
 a new conversation from the case block as the case is now, the whole case ledger and the handoff, linked to the old
 one, which stays. Above the model's context limit a turn compacts on its own first and says so, where the model has
 answered in the conversation: one holding only its case block has nothing to hand off. Nothing else is summarized or
@@ -105,7 +105,7 @@ worked: one a reload or a compaction began is, until its first turn, judged by t
 gained comments or attachments, a catch-up has the ledger read the comments it has not, waited for as the opening
 waits, then runs one turn on the opening's budget: the case update and the ledger's update are appended at its start
 as at every turn, and the engine's instruction names the new comments and attachments and asks, briefly, what changed
-and whether it changes the current understanding. With nothing new it calls no model. Where the provider's cache has
+and whether it answers or opens any question. With nothing new it calls no model. Where the provider's cache has
 expired on a conversation past a size, there are three ways on, none taken without the engineer:
 
 - **Full**: the conversation as it is; its next call resends it whole without the cache, its estimated tokens said.
@@ -321,12 +321,14 @@ The checks run without a model, on the text of every answer, live and
 reopened; then, where a deployment names an `editor` profile, the editor, before the answer is printed; and on the
 engineer's request, where it names a `reviewer` profile, the reviewer.
 
-A draft the customer will read is asked with the certainty review
-(`internal/companion/customer.md`): each claim reviewed silently for its evidence, its strongest alternative and the
-evidence that would tell them apart; the wording no stronger than the evidence, "the evidence strongly suggests" the
-most certain in the model's own voice; certainty words and causal proof never in its own voice; a root cause only as
-attributed; and the escalations of time, recovery, analogy and absence rejected. It goes with the request, not the
-system prompt, so a conversation begun before it has it; an internal note is asked without it.
+No answer or draft names a cause in the model's own voice, at any certainty: what the data might bear on is written
+as a question with the data that would settle it, and a cause appears only as an identified source's conclusion,
+attributed at the certainty its source gave (the companion prompt). A draft the customer will read is also asked
+with the certainty review (`internal/companion/customer.md`): each claim reviewed silently for its evidence, its
+strongest alternative and the evidence that would tell them apart; the wording no stronger than the evidence;
+certainty words never in its own voice; and the escalations of time, recovery, analogy and absence rejected. It goes
+with the request, not the system prompt, so a conversation begun before it has it; an internal note is asked
+without it.
 
 - **Statements.** For the checkers' requests only, an answer is split into numbered statements, `s1`, `s2`, …, so a
   finding can name one: each list item and each sentence of a paragraph, with its citations as the chat reads them;
@@ -363,9 +365,26 @@ system prompt, so a conversation begun before it has it; an internal note is ask
   them, each counted once), and at least half of them, rounded up, so one word in common, such as a node's name, is no
   closeness; a line of an item its statement cites preferred on a tie, then the earliest item's, then the earliest
   line. A span no line is that close to is shown as found nowhere in the evidence, unsupported.
+- **Found without a model, for reading:** two findings that take no verdict, listed with the citation forms'
+  (`·` in the checks tab), each naming its statement and never changing the answer.
+  - *Causal wording in the model's own voice:* a statement holding a causal term — a cause or root cause, caused,
+    causing, culprit, triggered, led to, resulted in, due to, contributed — or a likelihood — likely, probably —
+    not directly after a named source or its verb of saying ("engineering concluded the root cause is"), outside its
+    code spans; a question, and a statement opening as a condition,
+    are not checked, since they assert no cause (`check.TestCausalTerms`, `engine.TestCausalWordingFlagged`).
+  - *A command found in no evidence or guidance:* a command line — a code span that is one, as §Citations' command
+    lines are; every line of a fenced block of a shell (`sh`, `bash`, `shell`, `console`, `zsh`); or a line of a
+    bare block that is one, the block not presented as output — a shell prompt and a leading `sudo` taken off, a
+    comment or blank line skipped — whose
+    program, or one of whose options (each word beginning with `-`, a value after `=` taken off), is on no one line,
+    as a word, of the lines the conversation was shown, read as the span search reads them, or of the guidance of an
+    expert the conversation loaded; the finding names the program or the options not found
+    (`check.TestCommandLines`, `engine.TestUnsourcedCommandFlagged`). The values a command takes — names, paths,
+    times — are not looked for.
 - **The engineer's review of the findings.** Beneath an answer the chat prints no finding itself. One yellow line
   counts them all — each citation flagged, each citation not in the form read, each span flag, arithmetic included,
-  each finding the editor flagged and did not correct, and each citation the revision added — as
+  each causal wording and command found in no evidence or guidance, each finding the editor flagged and did not
+  correct, and each citation the revision added — as
   `⚠ 8 findings to review · f opens the checks tab` after the turn, taken as the review's offer is (`f` the first key
   on the empty input, any other input ending it; after a draft both are offered), and as
   `⚠ 8 findings, 1 judged · /check a1 opens them` otherwise, reopened included; there is none where there are none
@@ -1068,6 +1087,10 @@ checks.
   schema (`check.TestDeclMatchesSchema`).
 - **[E1]** A draft for the customer is asked with the certainty review, an internal note without it
   (`engine.TestCustomerDraftCarriesCertaintyReview`).
+- **[E1]** Causal wording in the model's own voice and a command found in no evidence or guidance are findings for
+  reading, counted beneath the answer, which is unchanged; a question, a condition and a named source's conclusion
+  are not causal wording, and a command's values are not looked for (`check.TestCausalTerms`,
+  `check.TestCommandLines`, `engine.TestCausalWordingFlagged`, `engine.TestUnsourcedCommandFlagged`).
 - **[E2]** The findings schema's roles hold: an anchor and a correction are the editor's, an alternative and a
   discriminator the reviewer's, an anchor says what fulfils it (`check.TestValidateRoles`); the certainty candidate
   takes own-voice certainty and causal wording, not a named source's (`check.TestCertaintyTerms`,

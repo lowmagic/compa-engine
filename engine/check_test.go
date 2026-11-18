@@ -255,7 +255,8 @@ func TestCheckSpanNoted(t *testing.T) {
 }
 
 // TestCheckSpanCommand: a code span that is a command line to run is no
-// claim and is not flagged, nor is one in a fenced block; a stated value,
+// claim and is not flagged as a span, nor is one in a fenced block, but
+// as a command where the evidence holds no line of it; a stated value,
 // and an expression whose first word is no program, are flagged still. A
 // product's program is a command only where the configuration names it
 // (checks.commands); the engine's own, such as dig, always is.
@@ -271,15 +272,19 @@ func TestCheckSpanCommand(t *testing.T) {
 		}
 		var spans []string
 		for _, f := range flags[0] {
+			if f.Finding == FindingCommand {
+				spans = append(spans, "command "+f.What)
+				continue
+			}
 			spans = append(spans, f.What)
 		}
 		return spans
 	}
-	if d := cmp.Diff([]string{"`oc -n openshift-dns get pods -o wide`", "`172.30.0.10`", "`ceph_osd_up == 0`"}, spans()); d != "" {
+	if d := cmp.Diff([]string{"`oc -n openshift-dns get pods -o wide`", "`172.30.0.10`", "`ceph_osd_up == 0`", "command `dig @172.30.0.10 kubernetes.default`"}, spans()); d != "" {
 		t.Errorf("span flags with no program configured (-want +got):\n%s", d)
 	}
 	r.s.e.config.Checks.Commands = []string{"oc"}
-	if d := cmp.Diff([]string{"`172.30.0.10`", "`ceph_osd_up == 0`"}, spans()); d != "" {
+	if d := cmp.Diff([]string{"`172.30.0.10`", "`ceph_osd_up == 0`", "command `oc -n openshift-dns get pods -o wide`", "command `dig @172.30.0.10 kubernetes.default`"}, spans()); d != "" {
 		t.Errorf("span flags with oc configured (-want +got):\n%s", d)
 	}
 }
@@ -408,7 +413,7 @@ func TestCheckSpanBudget(t *testing.T) {
 	}
 	cancelled, cancel := context.WithCancel(ctx)
 	cancel()
-	if _, err := r.s.unseenSpans(cancelled, []string{"no such marker 7f3a"}, x, spanBudget); !errors.Is(err, context.Canceled) {
+	if _, err := r.s.unseenSpans(cancelled, []string{"no such marker 7f3a"}, nil, x, spanBudget); !errors.Is(err, context.Canceled) {
 		t.Errorf("a cancelled span check returned %v", err)
 	}
 }
@@ -483,6 +488,7 @@ func TestCheckMalformedCitation(t *testing.T) {
 	want := []string{
 		r.names["osd"] + ":2 · not read as a citation without brackets: write [" + r.names["osd"] + ":2]",
 		"(" + r.names["csi"] + ") · not read as a citation in parentheses: write [" + r.names["csi"] + "]",
+		`"led to" · ` + causalWhy,
 	}
 	if d := cmp.Diff(want, got); d != "" {
 		t.Errorf("form flags (-want +got):\n%s", d)
@@ -914,7 +920,8 @@ func TestCheckNothingYet(t *testing.T) {
 // wording is the editor's candidate, never shown beneath the answer: the
 // synthetic "confirms that … were caused by" and a root cause inside an
 // attributed conclusion, whose voice the editor judges, but not "the
-// engineer confirmed", a named source's own word.
+// engineer confirmed", a named source's own word. Beneath the answer is
+// only the own-voice causal wording, a finding for reading.
 func TestCheckCertaintyCandidate(t *testing.T) {
 	s, _ := companionSession(t, nil)
 	ctx := context.Background()
@@ -933,10 +940,18 @@ func TestCheckCertaintyCandidate(t *testing.T) {
 	if d := cmp.Diff(map[string][]string{"s1": {"confirms", "caused"}, "s3": {"root cause"}}, terms); d != "" {
 		t.Errorf("certainty candidates (-want +got):\n%s", d)
 	}
+	var causal []string
 	for _, f := range c.Flags {
+		if f.Finding == FindingCausal {
+			causal = append(causal, f.What)
+			continue
+		}
 		if strings.Contains(f.What, "confirm") || strings.Contains(f.What, "cause") {
 			t.Errorf("a certainty candidate is shown beneath the answer: %+v", f)
 		}
+	}
+	if want := []string{`"caused"`}; !slices.Equal(causal, want) {
+		t.Errorf("causal wording beneath the answer %q; want %q", causal, want)
 	}
 	req, err := s.checkRequest(ctx, check.Editor, "# Check this answer\n", c, nil, "", editorRequestBytes)
 	if err != nil {

@@ -1217,7 +1217,7 @@ func turnKind(m ConversationMessage) string {
 		return "talk"
 	case strings.HasPrefix(m.Text, orientAsk):
 		return "opening"
-	case m.Text == analyzeAsk:
+	case m.Text == analyzeAsk || m.Text == analyzeAskBefore:
 		return "analyze"
 	case strings.HasPrefix(m.Text, draftLead):
 		return "draft"

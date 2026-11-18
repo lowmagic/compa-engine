@@ -983,7 +983,7 @@ func TestCustomerDraftCarriesCertaintyReview(t *testing.T) {
 	reqs := f.Requests()
 	asked := func(r model.Request) string { return r.Messages[len(r.Messages)-1].Text }
 	customer, internal := asked(reqs[len(reqs)-2]), asked(reqs[len(reqs)-1])
-	for _, want := range []string{"Draft Customer update", "the evidence strongly suggests", "smoking gun", "Never write that the root cause is X"} {
+	for _, want := range []string{"Draft Customer update", "the evidence strongly suggests", "smoking gun", "Never name a cause in your own voice"} {
 		if !strings.Contains(customer, want) {
 			t.Errorf("the customer draft's request lacks %q:\n%s", want, customer)
 		}

@@ -6,6 +6,8 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 )
 
 // Statement is one statement of a text a check looks at: a list item, a
@@ -301,6 +303,167 @@ func (more Commands) Command(span string) bool {
 	return len(words) > 1 && (commands[words[0]] || slices.Contains(more, words[0]))
 }
 
+// CommandLine is a command line a text gives to run, as the check for a
+// command found in no evidence or guidance reads it.
+type CommandLine struct {
+	// Line is the line as written, a shell prompt and a leading sudo taken
+	// off, a line continued with a backslash joined to the next.
+	Line string
+	// Program is its first word; Options its words beginning with -, each
+	// once, a value after = taken off. Its other words are values — names,
+	// paths, times — and are not looked for.
+	Program string
+	Options []string
+	// Statement is the statement holding it, for a code span, or the last
+	// statement before its block, its ID and text as Split numbers the
+	// whole text; empty where none is.
+	Statement Statement
+}
+
+// shellInfo are the info strings of a fenced block of a shell, every line
+// of which is a command line.
+var shellInfo = map[string]bool{"sh": true, "bash": true, "shell": true, "console": true, "zsh": true}
+
+// CommandLines are a text's command lines, in order, each once: a code
+// span that is a command line (Command); every line of a fenced block of a
+// shell; and a line of a bare block that is a command line, where the
+// block is not presented as output — an excerpt (Excerpts) whose
+// presenting statement cites evidence, as cites says of a statement's
+// text. A shell prompt and a leading sudo are taken off, and a blank or
+// comment line skipped; in a shell's block, a line opening with # is a
+// comment unless what follows "# " is a command line, a root prompt's.
+func (more Commands) CommandLines(text string, cites func(statement string) bool) []CommandLine {
+	var out []CommandLine
+	add := func(line string, st Statement) {
+		words := strings.Fields(line)
+		if len(words) == 0 || slices.ContainsFunc(out, func(c CommandLine) bool { return c.Line == line }) {
+			return
+		}
+		c := CommandLine{Line: line, Program: words[0], Statement: st}
+		for _, w := range words[1:] {
+			o, _, _ := strings.Cut(w, "=")
+			if strings.HasPrefix(o, "-") && strings.Trim(o, "-") != "" && !slices.Contains(c.Options, o) {
+				c.Options = append(c.Options, o)
+			}
+		}
+		out = append(out, c)
+	}
+	lines := strings.Split(text, "\n")
+	fenced := Fenced(lines)
+	for _, st := range Split(text) {
+		for _, sp := range Spans(st.Text) {
+			if l, ok := more.commandLine(sp, false); ok {
+				add(l, st)
+			}
+		}
+	}
+	for i := 0; i < len(lines); i++ {
+		if !fenced[i] {
+			continue
+		}
+		start := i
+		for i+1 < len(lines) && fenced[i+1] && (i == start || !closes(lines[start], lines[i])) {
+			i++
+		}
+		open := strings.TrimSpace(lines[start])
+		info := strings.ToLower(strings.TrimSpace(strings.TrimLeft(open, open[:1])))
+		if f := strings.Fields(info); len(f) > 0 {
+			info = f[0]
+		}
+		shell := shellInfo[info]
+		if !shell && info != "" {
+			continue
+		}
+		var after Statement
+		if before := Split(strings.Join(lines[:start], "\n")); len(before) > 0 {
+			after = before[len(before)-1]
+		}
+		if _, output := more.excerpt(lines, start, i); !shell && output && cites(after.Text) {
+			continue
+		}
+		body := lines[start+1 : i+1]
+		if i > start && closes(lines[start], lines[i]) {
+			body = lines[start+1 : i]
+		}
+		for k := 0; k < len(body); k++ {
+			l := strings.TrimSpace(body[k])
+			// A line continued with a backslash goes on in the next.
+			for strings.HasSuffix(l, `\`) && k+1 < len(body) {
+				k++
+				l = strings.TrimSpace(strings.TrimSuffix(l, `\`)) + " " + strings.TrimSpace(body[k])
+			}
+			if c, ok := more.commandLine(l, shell); ok {
+				add(c, after)
+			}
+		}
+	}
+	return out
+}
+
+// commandLine is line with its shell prompt and a leading sudo taken
+// off, and whether it is a command line: in a shell's block any line but a
+// blank or a comment one, elsewhere one that is a command line by Command.
+func (more Commands) commandLine(line string, shell bool) (string, bool) {
+	t := strings.TrimSpace(line)
+	l := strings.TrimSpace(prompt.ReplaceAllString(t, ""))
+	if f := strings.Fields(l); len(f) > 1 && f[0] == "sudo" {
+		l = strings.TrimSpace(l[len("sudo"):])
+	}
+	switch {
+	case l == "":
+		return "", false
+	case strings.HasPrefix(t, "#"):
+		// A comment, or a root prompt before a command line.
+		return l, l != t && more.Command(l)
+	case shell:
+		return l, true
+	}
+	return l, more.Command(l)
+}
+
+// Missing are what of the command line a line lacks, each as a word — a
+// run of letters, digits, _ and - standing alone: nothing where it holds
+// the program and every option; the program alone where it lacks it;
+// else the options it lacks.
+func (c CommandLine) Missing(line string) []string {
+	if !holdsWord(line, c.Program) {
+		return []string{c.Program}
+	}
+	var out []string
+	for _, o := range c.Options {
+		if !holdsWord(line, o) {
+			out = append(out, o)
+		}
+	}
+	return out
+}
+
+// holdsWord says whether w is in line with no letter, digit, _ or -
+// beside it.
+func holdsWord(line, w string) bool {
+	inWord := func(s string, at int, last bool) bool {
+		var r rune
+		if last {
+			r, _ = utf8.DecodeLastRuneInString(s[:at])
+		} else {
+			r, _ = utf8.DecodeRuneInString(s[at:])
+		}
+		return r == '_' || r == '-' || unicode.IsLetter(r) || unicode.IsDigit(r)
+	}
+	for from := 0; ; {
+		i := strings.Index(line[from:], w)
+		if i < 0 {
+			return false
+		}
+		i += from
+		end := i + len(w)
+		if (i == 0 || !inWord(line, i, true)) && (end == len(line) || !inWord(line, end, false)) {
+			return true
+		}
+		from = i + 1
+	}
+}
+
 // conditional is a statement's opening that makes it a condition.
 var conditional = regexp.MustCompile(`(?i)^[*_\s]*(?:if|unless|should|whether|in case)\b`)
 
@@ -340,8 +503,40 @@ var (
 	causal = regexp.MustCompile(`(?i)\b(root[- ]causes?|caus(?:ed|es|ing)|triggered|triggers|led to|leads to|resulted in)\b`)
 	// attributor ends where a certainty term is another's word: "the
 	// engineer confirmed", "the customer has confirmed".
-	attributor = regexp.MustCompile(`(?i)\b(?:engineers?|engineering|customers?|vendor|owner|support|documentation|docs|you|they|he|she)\s+(?:has\s+|have\s+|had\s+)?$`)
+	attributor = regexp.MustCompile(`(?i)\b(?:` + sources + `)\s+(?:has\s+|have\s+|had\s+)?$`)
+	// ownCause matches a cause or a likelihood named in a writer's own
+	// voice, where no named source's words come directly before it
+	// (sourced).
+	ownCause = regexp.MustCompile(`(?i)\b(root[- ]causes?|caus(?:e|es|ed|ing)|culprits?|trigger(?:ed|s)|le(?:d|ads) to|result(?:ed|s) in|due to|contribut(?:ed|es|ing|ors?)|likely|probably)\b`)
+	// sourced ends where a causal term is a named source's: directly after
+	// it, or after its verb of saying — "the vendor likely", "engineering
+	// concluded the root cause".
+	sourced = regexp.MustCompile(`(?i)\b(?:` + sources + `)\s+(?:(?:has|have|had)\s+)?(?:(?:said|says|stated|states|reported|reports|concluded|concludes|found|finds|identified|identifies|attributed|attributes|believes?|thinks?|suspects?|named|names)\s+(?:(?:that|the|a|an|it|this)\s+)?)?$`)
 )
+
+// sources are the named sources whose words a statement may give as
+// theirs.
+const sources = `engineers?|engineering|customers?|vendor|owner|support|documentation|docs|you|they|he|she`
+
+// CausalTerms are the causal and likelihood terms a statement holds in
+// its own voice, outside its code spans, lower-cased, in order, each once:
+// a cause or root cause, caused, causing, culprit, triggered, led to,
+// resulted in, due to, contributed, likely, probably; but where directly
+// after a named source (sourced). A question, and a statement opening as a
+// condition (Conditional), assert no cause, and hold none.
+func CausalTerms(s string) []string {
+	if strings.HasSuffix(strings.TrimSpace(s), "?") || Conditional(s) {
+		return nil
+	}
+	s = codeSpan.ReplaceAllStringFunc(s, func(m string) string { return strings.Repeat(" ", len(m)) })
+	var out []string
+	for _, m := range ownCause.FindAllStringIndex(s, -1) {
+		if w := strings.ToLower(s[m[0]:m[1]]); !sourced.MatchString(s[:m[0]]) && !slices.Contains(out, w) {
+			out = append(out, w)
+		}
+	}
+	return out
+}
 
 // CertaintyTerms are the certainty and causal terms a statement holds
 // outside its code spans, lower-cased, in order, each once: a certainty

@@ -36,7 +36,7 @@ func TestBaseConfigUnderTheDeployment(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			if got := ids(e); len(got) != 4 || got[0] != "troubleshooting" || e.config.Comments.Style == "" {
+			if got := ids(e); len(got) != 4 || got[0] != "internal-observations" || e.config.Comments.Style == "" {
 				t.Errorf("%q, %s: intentions %v, style %q; want the base's", config, step, got, e.config.Comments.Style)
 			}
 		}

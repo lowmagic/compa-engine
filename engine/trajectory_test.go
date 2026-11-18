@@ -646,3 +646,16 @@ func TestTrajectoryGuidanceAfterCompaction(t *testing.T) {
 		t.Errorf("after the compaction: %+v", after)
 	}
 }
+
+// TestTurnKindReadsBothAnalyzeAsks: a stored /analyze turn reads as one
+// whether it was asked for a structured analysis, as before the
+// observations report, or for the report.
+func TestTurnKindReadsBothAnalyzeAsks(t *testing.T) {
+	for _, ask := range []string{analyzeAsk, analyzeAskBefore} {
+		m := ConversationMessage{}
+		m.Kind, m.Text = MessageEngine, ask
+		if got := turnKind(m); got != "analyze" {
+			t.Errorf("%q reads as %q", ask, got)
+		}
+	}
+}

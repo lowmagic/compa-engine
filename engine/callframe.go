@@ -308,7 +308,7 @@ func (s *Session) checkAnswerSpans(ctx context.Context, x exposure, answers []*I
 		}
 		item := exposure{shown: map[string]bool{}, lines: map[string][]carriedRead{a.Item: x.lines[a.Item]}, named: map[string]bool{a.Item: x.named[a.Item]}}
 		item.shown[a.Item] = x.shown[a.Item]
-		found, err := s.unseenSpans(ctx, spans, item, spanBudget)
+		found, err := s.unseenSpans(ctx, spans, nil, item, spanBudget)
 		if err != nil {
 			return err
 		}
