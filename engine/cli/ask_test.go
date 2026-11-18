@@ -83,7 +83,7 @@ func TestAskPrintsTheCheck(t *testing.T) {
 		{"for reading", "The DNS pods likely restarted after the upgrade. Run `journalctl -u kubelet` on worker-1.", `{"text": "unused"}`,
 			`{"statement": "s1", "kind": "unsupported", "quote": "likely restarted", "why": "the lines show no restart", "suggested": "the DNS pods are running"}`,
 			[]string{"The DNS pods likely restarted after the upgrade. Run `journalctl -u kubelet` on worker-1.\n\n",
-				`· causal wording in the model's own voice: "likely" · names a cause or a likelihood in the model's own voice, not a named source's` + "\n  in: The DNS pods likely restarted after the upgrade.\n",
+				`· causal wording in the model's own voice: "likely" · states a cause or a likelihood in the model's own voice: offer it as a lead to explore, with what would test it, or attribute it` + "\n  in: The DNS pods likely restarted after the upgrade.\n",
 				"· a command found in no evidence or guidance: `journalctl -u kubelet` · `journalctl` is on no line of the evidence this conversation saw or of the guidance of an expert it loaded\n  in: Run `journalctl -u kubelet` on worker-1.\n"}},
 	} {
 		t.Run(c.name, func(t *testing.T) {

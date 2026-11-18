@@ -211,8 +211,10 @@ func TestCertaintyTerms(t *testing.T) {
 // TestCausalTerms: a statement's causal and likelihood terms in its own
 // voice, outside its code spans, in order and once each; none directly
 // after a named source or its verb of saying — a named source's
-// conclusion — and none in a question or a statement opening as a
-// condition, which assert no cause.
+// conclusion — none in a question or a statement opening as a
+// condition, which assert no cause, and none offered as a lead to explore
+// by a possibility earlier in its clause, but a root cause, a culprit and
+// a likelihood, which conclude or rank whatever comes before them.
 func TestCausalTerms(t *testing.T) {
 	for text, want := range map[string][]string{
 		"The OSD shutdown led to the disk filling, likely due to the full /var.":         {"led to", "likely", "due to"},
@@ -229,6 +231,10 @@ func TestCausalTerms(t *testing.T) {
 		"The customer reports it caused the outage.":                                     nil,
 		"The engineer said the restart caused it.":                                       {"caused"},
 		"The kubelet's eviction manager ranked the pod for eviction [e3:2] at 08:10:02.": nil,
+		"The OOM kills may have led to the restarts; the node's journal would show.":     nil,
+		"One lead: the upgrade could have triggered it, possibly due to the new MTU.":    nil,
+		"The full /var may be the root cause, and it is probably the culprit.":           {"root cause", "probably", "culprit"},
+		"The disk may be full, and that caused the eviction.":                            {"caused"},
 	} {
 		if d := cmp.Diff(want, check.CausalTerms(text)); d != "" {
 			t.Errorf("CausalTerms(%q) (-want +got):\n%s", text, d)

@@ -95,7 +95,7 @@ A deployment may install only some of the experts a routing library names. Its e
 
 ## Ownership
 
-**Engine owns:** source access, parsing, immutable evidence IDs, collection, authorization, the conversation and its assembly, tool declarations and the validation of every tool call, expert loading and pins, the egress gate, model selection policy, caching, and retention. **Model owns:** reading the case and its evidence — what it shows, what it might bear on, the questions open and the data that would settle them — which tools to call and which experts to load or consult, and the wording of its answers and drafts; never a cause in its own voice. **Engineer owns:** investigative direction, discretionary shell exploration, conclusions, what is sent to the customer, and case disposition.
+**Engine owns:** source access, parsing, immutable evidence IDs, collection, authorization, the conversation and its assembly, tool declarations and the validation of every tool call, expert loading and pins, the egress gate, model selection policy, caching, and retention. **Model owns:** reading the case and its evidence — what it shows, the questions open and the causal relationships worth exploring, and the data that would settle or test them — which tools to call and which experts to load or consult, and the wording of its answers and drafts; never a cause stated as found in its own voice. **Engineer owns:** investigative direction, discretionary shell exploration, conclusions, what is sent to the customer, and case disposition.
 
 ## Data model (logical, not a fixed database schema)
 
@@ -155,7 +155,7 @@ Keys: enter sends; `ctrl+o` prints the last turn's tool calls and results in ful
 
 Commands:
 
-- `/analyze` — an observations report: what is observed, with its evidence; what is attributed, and to whom; the open questions, each with the data that would settle it; the data to gather; what is not yet read.
+- `/analyze` — an observations report: what is observed, with its evidence; what is attributed, and to whom; the open questions and causal leads, each with the data that would settle or test it; the data to gather; what is not yet read.
 - `/draft [intention]` — a comment for an intention from the configuration (`comments.intentions`, the engine's base set unless the deployment replaces it, in the house style, `comments.style`): an internal observations comment, an internal note, a request for data or a status update in the base set; kept as an item; the intentions are listed when none is given. Never posted by the engine.
 - `/load <expert>` — load an expert's guidance into the conversation.
 - `/experts` — the installed experts, with those loaded.

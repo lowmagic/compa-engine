@@ -293,7 +293,7 @@ func (s *Session) AnswerFlags(ctx context.Context, texts []string) ([][]AnswerFl
 // flagged; causalWhy why causal wording is.
 const (
 	arithmeticWrong = "incorrect: the arithmetic does not hold"
-	causalWhy       = "names a cause or a likelihood in the model's own voice, not a named source's"
+	causalWhy       = "states a cause or a likelihood in the model's own voice: offer it as a lead to explore, with what would test it, or attribute it"
 )
 
 func (s *Session) answerFlags(ctx context.Context, texts []string, b spanReads) ([][]AnswerFlag, error) {

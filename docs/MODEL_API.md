@@ -93,8 +93,8 @@ transcript is kept and linked to the call that started it. Several consults in o
 reply says so and the chat offers `/compact`. `/compact` has the model write a handoff — each material point as
 observed, attributed and to whom, or inferred, cited with the identity and time window it holds for; the strongest
 evidence against each reading still open, and every correction and retraction; what is ruled out, by which check and
-only as far as it reached; evidence missing, truncated or uninspected kept as unknown; the open questions with the
-data that would settle them; what is awaited from whom; the experts loaded; and the engineer's last request — and starts
+only as far as it reached; evidence missing, truncated or uninspected kept as unknown; the open questions and causal
+leads with the data that would settle or test them; what is awaited from whom; the experts loaded; and the engineer's last request — and starts
 a new conversation from the case block as the case is now, the whole case ledger and the handoff, linked to the old
 one, which stays. Above the model's context limit a turn compacts on its own first and says so, where the model has
 answered in the conversation: one holding only its case block has nothing to hand off. Nothing else is summarized or
@@ -321,9 +321,10 @@ The checks run without a model, on the text of every answer, live and
 reopened; then, where a deployment names an `editor` profile, the editor, before the answer is printed; and on the
 engineer's request, where it names a `reviewer` profile, the reviewer.
 
-No answer or draft names a cause in the model's own voice, at any certainty: what the data might bear on is written
-as a question with the data that would settle it, and a cause appears only as an identified source's conclusion,
-attributed at the certainty its source gave (the companion prompt). A draft the customer will read is also asked
+No answer or draft states a cause as found in the model's own voice, calls one likely or the root cause, or ranks
+explanations. A causal relationship worth exploring is offered as a lead — a possibility, with what in the data
+suggests it and the data that would test it — and a cause appears as found only as an identified source's
+conclusion, attributed at the certainty its source gave (the companion prompt). A draft the customer will read is also asked
 with the certainty review (`internal/companion/customer.md`): each claim reviewed silently for its evidence, its
 strongest alternative and the evidence that would tell them apart; the wording no stronger than the evidence;
 certainty words never in its own voice; and the escalations of time, recovery, analogy and absence rejected. It goes
@@ -370,8 +371,11 @@ without it.
   - *Causal wording in the model's own voice:* a statement holding a causal term — a cause or root cause, caused,
     causing, culprit, triggered, led to, resulted in, due to, contributed — or a likelihood — likely, probably —
     not directly after a named source or its verb of saying ("engineering concluded the root cause is"), outside its
-    code spans; a question, and a statement opening as a condition,
-    are not checked, since they assert no cause (`check.TestCausalTerms`, `engine.TestCausalWordingFlagged`).
+    code spans. A term offered as a lead to explore, after a possibility earlier in its clause — may, might, could,
+    possibly, possible, potential, perhaps: "the OOM kills may have led to the restarts" — is not checked, but for a
+    root cause, a culprit and a likelihood, which conclude or rank whatever comes before them; nor are a question and
+    a statement opening as a condition, which assert no cause (`check.TestCausalTerms`,
+    `engine.TestCausalWordingFlagged`).
   - *A command found in no evidence or guidance:* a command line — a code span that is one, as §Citations' command
     lines are; every line of a fenced block of a shell (`sh`, `bash`, `shell`, `console`, `zsh`); or a line of a
     bare block that is one, the block not presented as output — a shell prompt and a leading `sudo` taken off, a
@@ -1088,8 +1092,9 @@ checks.
 - **[E1]** A draft for the customer is asked with the certainty review, an internal note without it
   (`engine.TestCustomerDraftCarriesCertaintyReview`).
 - **[E1]** Causal wording in the model's own voice and a command found in no evidence or guidance are findings for
-  reading, counted beneath the answer, which is unchanged; a question, a condition and a named source's conclusion
-  are not causal wording, and a command's values are not looked for (`check.TestCausalTerms`,
+  reading, counted beneath the answer, which is unchanged; a question, a condition, a named source's conclusion and
+  a causal lead offered as a possibility are not causal wording, a root cause and a likelihood are wherever they
+  stand, and a command's values are not looked for (`check.TestCausalTerms`,
   `check.TestCommandLines`, `engine.TestCausalWordingFlagged`, `engine.TestUnsourcedCommandFlagged`).
 - **[E2]** The findings schema's roles hold: an anchor and a correction are the editor's, an alternative and a
   discriminator the reviewer's, an anchor says what fulfils it (`check.TestValidateRoles`); the certainty candidate

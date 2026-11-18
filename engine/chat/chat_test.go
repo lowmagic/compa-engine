@@ -459,7 +459,7 @@ func TestAnswerFlagsShown(t *testing.T) {
 		"· (e1) not read as a citation in parentheses: write [e1]",
 	}
 	reading := []string{
-		`· "likely", "due to" names a cause or a likelihood in the model's own voice, not a named source's`,
+		`· "likely", "due to" states a cause or a likelihood in the model's own voice: offer it as a lead to explore, with what would test it, or attribute it`,
 		"· `journalctl -u ovn-controller --no-pager` `journalctl` is on no line of the evidence this conversation saw or of the guidance of an expert it loaded",
 	}
 	claims := []string{

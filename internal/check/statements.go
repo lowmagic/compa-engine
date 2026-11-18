@@ -512,18 +512,29 @@ var (
 	// it, or after its verb of saying — "the vendor likely", "engineering
 	// concluded the root cause".
 	sourced = regexp.MustCompile(`(?i)\b(?:` + sources + `)\s+(?:(?:has|have|had)\s+)?(?:(?:said|says|stated|states|reported|reports|concluded|concludes|found|finds|identified|identifies|attributed|attributes|believes?|thinks?|suspects?|named|names)\s+(?:(?:that|the|a|an|it|this)\s+)?)?$`)
+	// conclusive matches the causal terms that state a conclusion or rank
+	// one, which no possibility before them makes a lead.
+	conclusive = regexp.MustCompile(`(?i)^(?:root[- ]causes?|culprits?|likely|probably)$`)
+	// exploring matches a possibility in a clause before a causal term,
+	// which offers the relationship as a lead to explore: "the OOM kills
+	// may have led to the restarts".
+	exploring = regexp.MustCompile(`(?i)\b(?:may|might|could|possibly|possible|potential(?:ly)?|perhaps)\b`)
+	// clauseBreak ends the clause before a term.
+	clauseBreak = regexp.MustCompile(`[,;:.()—]`)
 )
 
 // sources are the named sources whose words a statement may give as
 // theirs.
 const sources = `engineers?|engineering|customers?|vendor|owner|support|documentation|docs|you|they|he|she`
 
-// CausalTerms are the causal and likelihood terms a statement holds in
+// CausalTerms are the causal and likelihood terms a statement asserts in
 // its own voice, outside its code spans, lower-cased, in order, each once:
 // a cause or root cause, caused, causing, culprit, triggered, led to,
 // resulted in, due to, contributed, likely, probably; but where directly
-// after a named source (sourced). A question, and a statement opening as a
-// condition (Conditional), assert no cause, and hold none.
+// after a named source (sourced), and, but for a conclusive term, where a
+// possibility earlier in its clause offers it as a lead to explore
+// (exploring). A question, and a statement opening as a condition
+// (Conditional), assert no cause, and hold none.
 func CausalTerms(s string) []string {
 	if strings.HasSuffix(strings.TrimSpace(s), "?") || Conditional(s) {
 		return nil
@@ -531,9 +542,18 @@ func CausalTerms(s string) []string {
 	s = codeSpan.ReplaceAllStringFunc(s, func(m string) string { return strings.Repeat(" ", len(m)) })
 	var out []string
 	for _, m := range ownCause.FindAllStringIndex(s, -1) {
-		if w := strings.ToLower(s[m[0]:m[1]]); !sourced.MatchString(s[:m[0]]) && !slices.Contains(out, w) {
-			out = append(out, w)
+		w := strings.ToLower(s[m[0]:m[1]])
+		if sourced.MatchString(s[:m[0]]) || slices.Contains(out, w) {
+			continue
 		}
+		clause := s[:m[0]]
+		if b := clauseBreak.FindAllStringIndex(clause, -1); len(b) > 0 {
+			clause = clause[b[len(b)-1][1]:]
+		}
+		if !conclusive.MatchString(w) && exploring.MatchString(clause) {
+			continue
+		}
+		out = append(out, w)
 	}
 	return out
 }

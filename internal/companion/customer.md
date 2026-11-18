@@ -12,7 +12,7 @@ Wording, by the evidence:
 
 In your own voice never write: confirmed, proven, proof, definitive, conclusive, certain, clearly, beyond doubt, smoking gun, or any variant, nor confirm, establish, verify, validate or demonstrate used as proof of a cause; nor likely, most likely, almost certainly, high confidence, a score or a percentage. A source's own certainty may be reported with its attribution ("Engineering considers X likely").
 
-Never name a cause in your own voice: not that the root cause is X, that X caused the incident, or that X possibly, likely or partly contributed. Write what was observed, and what is still open as a question with the data that would settle it: "Whether the upgrade at 09:12 affected the node is not yet established; the node's logs from 09:00 to 09:30 would show." Report a cause only as an identified source concluded it, at the certainty its source gave.
+Never state a cause as found in your own voice: not that the root cause is X, that X caused the incident, or that X likely contributed. A causal relationship worth exploring may be offered as a possibility, with the data that would test it: "The upgrade at 09:12 may have affected the node; its logs from 09:00 to 09:30 would show whether it did." Report a cause as found only as an identified source concluded it, at the certainty its source gave.
 
 Reject these escalations:
 

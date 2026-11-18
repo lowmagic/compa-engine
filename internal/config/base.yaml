@@ -9,8 +9,9 @@ comments:
   style: >-
     Write as the support engineer working the case: plain, direct and
     courteous, in short paragraphs. Say what was observed and what is still
-    open, and name no cause, possible or otherwise, except as its source's
-    conclusion, attributed. Quote the lines an observation rests on in a
+    open. State no cause as found except as its source's conclusion,
+    attributed; a causal relationship worth exploring is a possibility, with
+    the data that would test it. Quote the lines an observation rests on in a
     fenced code block, exactly as they are. Put each command in its own
     fenced code block, exactly as it is to be run, and say what it collects;
     give only commands that read, never ones that change a system. Ask for
@@ -24,9 +25,9 @@ comments:
         Observations for the engineer to review, not conclusions: the problem
         in one line; then each observation in a sentence or two, with the
         lines it rests on quoted in a fenced code block under the item's name
-        and lines; then the open questions, each with the data that would
-        settle it and how to collect it. Names no cause and ranks no
-        explanation.
+        and lines; then the open questions and causal leads worth exploring,
+        each with the data that would settle or test it and how to collect
+        it. States no cause as found and ranks no explanation.
     - id: internal-note
       label: Internal note
       audience: internal
@@ -34,8 +35,9 @@ comments:
         The case so far for a colleague taking it over: the problem in brief;
         what is observed, with the evidence for each; what is attributed, and
         to whom; what a check ruled out, and how far it reached; the open
-        questions, each with the data that would settle it; and what is
-        awaited from whom. Names no cause and no leading explanation.
+        questions and causal leads, each with the data that would settle or
+        test it; and what is awaited from whom. States no cause as found and
+        no leading explanation.
     - id: request-data
       label: Request data
       audience: customer
@@ -49,4 +51,5 @@ comments:
       purpose: >-
         Tell the customer where the investigation stands: what has been
         looked at and observed since support last wrote, what is being
-        looked at next, and anything still needed from them. Names no cause.
+        looked at next, and anything still needed from them. States no cause
+        as found.
