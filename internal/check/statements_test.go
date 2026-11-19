@@ -217,13 +217,14 @@ func TestCertaintyTerms(t *testing.T) {
 // a likelihood, which conclude or rank whatever comes before them.
 func TestCausalTerms(t *testing.T) {
 	for text, want := range map[string][]string{
-		"The OSD shutdown led to the disk filling, likely due to the full /var.":         {"led to", "likely", "due to"},
-		"The root cause is the full /var; it caused the eviction and is the culprit.":    {"root cause", "caused", "culprit"},
-		"Root-cause: the upgrade triggered a restart, which resulted in the outage.":     {"root-cause", "triggered", "resulted in"},
-		"Probably the plugin contributed to it, and it is causing retries, PROBABLY.":    {"probably", "contributed", "causing"},
-		"The cause is open; two causes remain, and one leads to the other.":              {"cause", "causes", "leads to"},
-		"The controller logged `likely caused by x`, an unlikely value.":                 nil,
-		"The pods restarted because the node rebooted.":                                  nil,
+		"The OSD shutdown led to the disk filling, likely due to the full /var.":      {"led to", "likely", "due to"},
+		"The root cause is the full /var; it caused the eviction and is the culprit.": {"root cause", "caused", "culprit"},
+		"Root-cause: the upgrade triggered a restart, which resulted in the outage.":  {"root-cause", "triggered", "resulted in"},
+		"Probably the plugin contributed to it, and it is causing retries, PROBABLY.": {"probably", "contributed", "causing"},
+		"The cause is open; two causes remain, and one leads to the other.":           {"cause", "causes", "leads to"},
+		"The controller logged `likely caused by x`, an unlikely value.":              nil,
+		"The pods restarted because the node rebooted.":                               nil,
+
 		"Is the upgrade the cause?":                                                      nil,
 		"If the socket was removed, that caused the crash.":                              nil,
 		"Engineering concluded the root cause is the full /var.":                         nil,
