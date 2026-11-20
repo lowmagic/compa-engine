@@ -90,6 +90,11 @@ import (
 //     restating the action, the answers given and flagged, the items
 //     returned neither read on nor cited and those with no answer,
 //     citation or read-on, and the output tokens its calls reported.
+//   - steps: one capture of a node whose disk is full, and whether it ran
+//     out of space; whether the answer ends with a numbered list of what
+//     the companion can do and a separate, unnumbered one for the
+//     engineer, then the engineer's message "1" and the tool calls that
+//     turn makes.
 //
 // COMPA_LIVE_HOUSE names a file whose text is the deployment's house
 // section (companion.house) for every scenario, so a deployment's own can
@@ -139,6 +144,7 @@ func TestLiveCompanionBehaviour(t *testing.T) {
 		{"told", liveChronologyTold},
 		{"recovery", liveRecovery},
 		{"investigate", liveInvestigation},
+		{"steps", liveNextSteps},
 	} {
 		if len(want) > 0 && !want[sc.name] {
 			continue
@@ -1342,4 +1348,71 @@ func liveRecovery(t *testing.T, s *Session) string {
 	return fmt.Sprintf("names 98%% %v, the ENOSPC errors %v, 41%% %v; ran out: %q; certainty %q\n\nanswer: %s",
 		liveFull.MatchString(reply.Text), liveENOSPC.MatchString(reply.Text), strings.Contains(reply.Text, "41"), verdict,
 		liveCertainty(reply.Text), liveFlat(reply.Text, 600))
+}
+
+var (
+	liveNextHead = regexp.MustCompile(`(?i)^\W*next:\W*$`)
+	liveForYou   = regexp.MustCompile(`(?i)^\W*for you:\W*$`)
+	liveNumbered = regexp.MustCompile(`^\s*\d+[.)]\s+\S`)
+	liveDashed   = regexp.MustCompile(`^\s*[-*]\s+\S`)
+)
+
+// liveNextSteps is the prompt's next steps: a question on one capture of a
+// node with a full disk, which also holds outputs the question does not
+// need, then the engineer answering "1". It measures the lists the first
+// answer ends with, and what the second turn runs.
+func liveNextSteps(t *testing.T, s *Session) string {
+	t.Helper()
+	ctx := context.Background()
+	files := map[string]string{}
+	liveSosCapture("capture-1", "worker-1", "Tue Oct 20 10:02:11 UTC 2026",
+		"/dev/sda4       125829120 123312640   2516480  98% /var/lib/containers\n",
+		"Oct 20 09:58:02 worker-1 kubelet[2210]: I1020 09:58:02.114201    2210 kubelet.go:2412] \"SyncLoop (housekeeping)\"\n"+
+			"Oct 20 10:01:12 worker-1 crio[1874]: time=\"2026-10-20 10:01:12Z\" level=error msg=\"Error pulling image: writing blob: write /var/lib/containers/storage/overlay/staging/4471/layer.tar: no space left on device\"\n"+
+			"Oct 20 10:02:11 worker-1 sosreport[30412]: Starting sos report collection\n", files)
+	files["capture-1/sos_commands/crio/crictl_images"] = "IMAGE                                TAG   IMAGE ID       SIZE\n" +
+		"registry.example.test/shop/orders    v41   3f1c9a2be0d41  1.21GB\nregistry.example.test/shop/orders    v40   9b77e0c4a1f02  1.19GB\n" +
+		"registry.example.test/shop/reports   v12   c40d1e8f5a377  4.87GB\n"
+	files["capture-1/sos_commands/crio/crictl_ps_-a"] = "CONTAINER      IMAGE          CREATED       STATE    NAME     ATTEMPT  POD ID\n" +
+		"7d0e1b2c3a4f5  3f1c9a2be0d41  2 hours ago   Running  orders   0        a1b2c3d4e5f60\n" +
+		"0c9d8e7f6a5b4  c40d1e8f5a377  3 days ago    Exited   reports  14       f6e5d4c3b2a10\n"
+	files["capture-1/sos_commands/logs/journalctl_--no-pager_--unit_kubelet"] = "Oct 20 09:41:30 worker-1 kubelet[2210]: I1020 09:41:30.118204    2210 image_gc_manager.go:310] \"Disk usage on image filesystem is over the high threshold, trying to free bytes down to the low threshold\" usage=91 highThreshold=85\n" +
+		"Oct 20 09:41:31 worker-1 kubelet[2210]: E1020 09:41:31.004417    2210 kubelet.go:1402] \"Image garbage collection failed multiple times in a row\" err=\"wanted to free 8053063680 bytes, but freed 0 bytes\"\n"
+	s.c.root = liveFiles(t, files)
+	reply, err := s.Talk(ctx, "The customer sent a capture of worker-1. Did it run out of disk space under /var/lib/containers?", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Each line of the answer belongs to the list whose heading came last;
+	// the report gives the lists' lines as written, whatever the answer's
+	// length before them.
+	list, next, mine, numberedMine, elsewhere := "", 0, 0, 0, 0
+	hasNext, hasMine := false, false
+	var lists []string
+	for _, l := range strings.Split(reply.Text, "\n") {
+		switch {
+		case liveNextHead.MatchString(l):
+			list, hasNext = "next", true
+		case liveForYou.MatchString(l):
+			list, hasMine = "mine", true
+		case liveNumbered.MatchString(l) && list == "next":
+			next++
+		case liveNumbered.MatchString(l) && list == "mine":
+			numberedMine++
+		case liveNumbered.MatchString(l):
+			elsewhere++
+		case liveDashed.MatchString(l) && list == "mine":
+			mine++
+		}
+		if list != "" && strings.TrimSpace(l) != "" {
+			lists = append(lists, l)
+		}
+	}
+	calls := &liveCalls{}
+	second, err := s.Talk(ctx, "1", calls.on)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return fmt.Sprintf("Next: %v, %d numbered; For you: %v, %d items, %d of them numbered; %d numbered lines elsewhere\n\nanswer: %s\n\nits lists:\n%s\nafter \"1\": %d tool calls\n%sanswer: %s",
+		hasNext, next, hasMine, mine, numberedMine, elsewhere, liveFlat(reply.Text, 400), liveList(lists), len(calls.calls), calls, liveFlat(second.Text, 400))
 }

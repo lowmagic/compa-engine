@@ -216,3 +216,24 @@ Done when: a library compiled from a keys file and the manifests reads back by t
 or an unknown key (`expertcheck_test.TestCompileLibrary`, `TestCompileLibraryRefuses`); a stale library and a changed
 package with its version kept fail (`TestRoutingCommand`, `TestVersions`); and no experts repository copies the
 registry's name rule or the version check.
+
+## 15. Next steps the engineer answers by number
+
+Status: done
+
+An answer ends with what could be done next, in two lists: the steps the companion can carry out itself, numbered,
+and what only the engineer or the customer can do, in a list of its own with no numbers. The engineer answers with a
+number alone and the companion carries that step out. A draft and a consult's answer carry neither list.
+
+Delivers: The companion (the prompt's method, shared by every deployment).
+
+Done when: on the live model, an answer to a direct question about a capture that holds more than the question needs
+ends with both lists, the engineer's unnumbered, and the message "1" is carried out
+(`TestLiveCompanionBehaviour`, scenario `steps`).
+
+The scenario ran three times on gemini-3.8-flash at medium. Every answer ended with a numbered list of two steps and
+a list for the engineer of one item, not numbered. Answered "1", each run carried its first step out with the tools,
+in 1, 1 and 2 calls, and one ended that answer with new lists numbered from 1. An earlier set of three, whose report
+cut the lists' text, counted 2, 3 and 1 numbered steps and one unnumbered item each. Before the prompt said to end
+every answer so, a short answer carried no numbered list in two runs of two, and the companion answered "1" by saying
+it had numbered nothing. It is the model's behaviour on one synthetic case: nothing in the engine reads the lists.
