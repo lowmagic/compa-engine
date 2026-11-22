@@ -18,7 +18,7 @@ type Statement struct {
 }
 
 var (
-	listItem   = regexp.MustCompile(`^\s*(?:[-*+]|\d+[.)])\s+(\S.*)$`)
+	listItem   = regexp.MustCompile(`^\s*(?:[-*+]|\d+[.)]|[a-zA-Z][.)])\s+(\S.*)$`)
 	heading    = regexp.MustCompile(`^\s{0,3}#{1,6}\s`)
 	rule       = regexp.MustCompile(`^\s{0,3}(?:-{3,}|\*{3,}|_{3,})\s*$`)
 	quoteMark  = regexp.MustCompile(`^\s*>\s?`)

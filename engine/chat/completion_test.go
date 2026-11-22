@@ -258,23 +258,24 @@ func TestInputKeepsItsRowsUntilAPrint(t *testing.T) {
 	}
 }
 
-// The empty input always says how to send, run a command or shell, and
-// break a line, and after each thing sent shows the next tip.
-func TestInputHintKeepsItsKeysAndTurnsItsTip(t *testing.T) {
+// The empty input cues a question, / for commands or ! for shell, and when
+// the latest answer offered lettered Next steps it cues selecting one too.
+func TestInputPlaceholderTracksNextSteps(t *testing.T) {
 	h := start(t, session(t, "case.json"), Options{NoOpen: true})
-	before := h.m.input.Placeholder
-	h.say("/experts")
+	if got := h.m.input.Placeholder; got != hintAsk {
+		t.Errorf("initial placeholder = %q, want %q", got, hintAsk)
+	}
+	if v := h.view(); !strings.Contains(v, "Ask a question, / for commands, or ! for shell") {
+		t.Errorf("the empty input does not show the ask cue:\n%s", v)
+	}
+	h.update(turnDone{kind: kindAnswer, text: "Checked e1.\n\nNext (enter a letter, or ask a question):\nA. Read e2\nB. Grep kubelet"})
 	h.settle()
-	after := h.m.input.Placeholder
-	for _, p := range []string{before, after} {
-		if !strings.HasPrefix(p, "a message, /command or !shell · alt+enter new line · ") {
-			t.Errorf("the hint lost its keys: %q", p)
-		}
+	if got := h.m.input.Placeholder; got != hintNext {
+		t.Errorf("placeholder after Next steps = %q, want %q", got, hintNext)
 	}
-	if before == after {
-		t.Errorf("the tip did not change after a command: %q", after)
-	}
-	if v := h.view(); !strings.Contains(v, "alt+enter new line") {
-		t.Errorf("the empty input does not show the hint:\n%s", v)
+	h.update(turnDone{kind: kindAnswer, text: "Nothing further."})
+	h.settle()
+	if got := h.m.input.Placeholder; got != hintAsk {
+		t.Errorf("placeholder after plain answer = %q, want %q", got, hintAsk)
 	}
 }

@@ -382,7 +382,7 @@ func TestReopenMakesNoCall(t *testing.T) {
 func TestCitationsFlagged(t *testing.T) {
 	h := start(t, session(t, "case.json"), Options{})
 	out := flat(h.out())
-	for _, want := range []string{"say [e1:2].", "[e999:2] ⚠", "[e1:100000] ⚠", "⚠ 2 findings to review · f opens the checks tab"} {
+	for _, want := range []string{"say [e1:2].", "[e999:2] ⚠", "[e1:100000] ⚠", "⚠ 2 findings · /check a1 opens them"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("the answer lacks %q:\n%s", want, out)
 		}
@@ -472,7 +472,7 @@ func TestAnswerFlagsShown(t *testing.T) {
 		h     *harness
 		lines []string
 	}{
-		{"the turn", h, []string{"⚠ 2 findings to review · f opens the checks tab", "⚠ 4 findings to review · f opens the checks tab", "⚠ 2 findings to review · f opens the checks tab"}},
+		{"the turn", h, []string{"⚠ 2 findings · /check a1 opens them", "⚠ 4 findings · /check a2 opens them", "⚠ 2 findings · /check a4 opens them"}},
 		{"the reopened chat", start(t, s, Options{NoOpen: true}), []string{"⚠ 2 findings · /check a1 opens them", "⚠ 4 findings · /check a2 opens them", "⚠ 2 findings · /check a4 opens them"}},
 	} {
 		out := run.h.out()

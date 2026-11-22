@@ -131,47 +131,37 @@ type model struct {
 	// resuming whether the prints wait for the chat's screen to be back.
 	browser, pending *browser
 	resuming         bool
-	// sent counts what the engineer has sent, which chooses the input's
-	// tip.
-	sent int
-	// reviewOffer is the item a draft was kept as, whose review the chat
-	// offers on r after it, until the next thing is sent or the next turn
-	// begins; empty when nothing is offered.
-	reviewOffer string
-	// checkOffer is the answer whose findings the chat offers in the
-	// checks tab on f after it, as reviewOffer is offered.
-	checkOffer string
+	// hasNext says the latest answer ended with lettered Next steps, which
+	// the empty input's placeholder cues.
+	hasNext bool
 	// judged are the verdicts kept since the browser opened, which its
 	// closing sums up.
 	judged []engine.SpanVerdict
 }
 
-// hint is what the empty input always says; tips are said one at a time
-// after it, the next after each thing sent, the row cut where the
-// terminal is narrower.
-const hint = "a message, /command or !shell · alt+enter new line"
+const (
+	hintAsk  = "Ask a question, / for commands, or ! for shell · alt+enter new line"
+	hintNext = "Enter a next step (A, B, …), ask a question, / for commands, or ! for shell · alt+enter new line"
+)
 
-var tips = []string{
-	"/evidence browses what the case holds",
-	"v in the browser marks lines for your next message",
-	"/pin keeps the last answer as an item",
-	"/ledger shows the comments as the ledger reads them",
-	"ctrl+o prints the last turn's tool calls in full",
-	"/draft writes a draft for an intention",
-	"/usage shows the case's tokens and cost",
-	"ctrl+c stops a running turn",
+// placeholder is the empty input's cue, naming lettered next steps when the
+// latest answer offered them.
+func placeholder(hasNext bool) string {
+	if hasNext {
+		return hintNext
+	}
+	return hintAsk
 }
 
-// placeholder is the empty input's text after n things sent.
-func placeholder(n int) string {
-	return hint + " · " + tips[n%len(tips)]
+func (m *model) refreshPlaceholder() {
+	m.input.Placeholder = placeholder(m.hasNext)
 }
 
 func newModel(s *engine.Session, o Options, spawn spawnFunc) *model {
 	in := textarea.New()
 	in.ShowLineNumbers = false
 	in.Prompt = "› "
-	in.Placeholder = placeholder(0)
+	in.Placeholder = placeholder(false)
 	in.DynamicHeight = true
 	in.MinHeight = 1
 	in.MaxHeight = 8
@@ -430,10 +420,6 @@ func (m *model) update(msg tea.Msg) tea.Cmd {
 		return nil
 	}
 	if m.browser == nil {
-		if _, ok := msg.(tea.PasteMsg); ok {
-			// A paste begins a message, as a key does: the offers end.
-			m.reviewOffer, m.checkOffer = "", ""
-		}
 		var cmd tea.Cmd
 		m.input, cmd = m.input.Update(msg)
 		return cmd
@@ -446,26 +432,6 @@ func (m *model) key(k tea.KeyPressMsg) tea.Cmd {
 	if m.choice != nil && m.choiceKey(k.String()) {
 		return nil
 	}
-	// r takes the review offered, and f the findings offered in the tab,
-	// only as the first key after the answer, on an empty input with
-	// nothing else open; any other key ends both offers, so a letter of a
-	// new message is never a paid review or a check begun.
-	idle := m.turn == nil && m.choice == nil && m.input.Value() == ""
-	switch {
-	case idle && k.String() == "r" && m.reviewOffer != "":
-		item := m.reviewOffer
-		m.reviewOffer, m.checkOffer = "", ""
-		m.print(commandLine("/review " + item))
-		m.review(engine.ReviewAsk{Item: item})
-		return nil
-	case idle && k.String() == "f" && m.checkOffer != "":
-		label := m.checkOffer
-		m.reviewOffer, m.checkOffer = "", ""
-		m.print(commandLine("/check " + label))
-		m.checkFindings(label)
-		return nil
-	}
-	m.reviewOffer, m.checkOffer = "", ""
 	if value, handled, submit := m.completion.key(m.input.Value(), k.String()); handled {
 		if value != m.input.Value() {
 			m.input.SetValue(value)
@@ -507,7 +473,6 @@ func (m *model) enter() {
 	if line == "" {
 		return
 	}
-	m.reviewOffer, m.checkOffer = "", ""
 	var sent bool
 	switch {
 	case strings.HasPrefix(line, "/"):
@@ -519,8 +484,7 @@ func (m *model) enter() {
 	}
 	if sent {
 		m.input.Reset()
-		m.sent++
-		m.input.Placeholder = placeholder(m.sent)
+		m.refreshPlaceholder()
 	}
 }
 

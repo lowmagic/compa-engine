@@ -245,7 +245,7 @@ func (m *model) reloaded(d turnDone, model engine.CompanionModel) {
 		m.print(noteLine("suggested context: a new conversation begun from the case as it is now, the ledger, " + text.Plural(r.Ranked, "ranked item") +
 			", the pinned items and the last exchange, about " + engine.Thousands(r.Estimate) + " tokens; the earlier one is kept"))
 	case engine.ReloadSummary:
-		m.printAnswer(d, model, false)
+		m.printAnswer(d, model)
 	}
 }
 

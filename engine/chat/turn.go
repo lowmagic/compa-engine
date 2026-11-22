@@ -181,7 +181,6 @@ type turnWork func(ctx context.Context, on func(engine.TalkEvent), send func(tea
 func (m *model) startTurn(kind turnKind, status string, work turnWork) {
 	s := m.s
 	t := &turnState{kind: kind, status: status, model: m.current}
-	m.reviewOffer, m.checkOffer = "", ""
 	if s.EditsAnswers() && kind != kindCompact && kind != kindLoad && kind != kindLedger && kind != kindReload && kind != kindReview {
 		t.mark = markChecking
 	}
@@ -838,7 +837,7 @@ func (m *model) done(d turnDone) tea.Cmd {
 		// An answer the editor had checked or was checking is kept as
 		// shown, so it is printed as reopening prints it.
 		if d.check.Ran && strings.TrimSpace(d.text) != "" && t != nil {
-			m.printAnswer(d, t.model, false)
+			m.printAnswer(d, t.model)
 		}
 		release()
 		m.print(noteLine("cancelled"))
@@ -880,25 +879,8 @@ func (m *model) done(d turnDone) tea.Cmd {
 		m.printReview(*d.review)
 		return nil
 	}
-	m.printAnswer(d, model, true)
-	release()
-	if d.kind == kindDraft && d.item.Seq != 0 {
-		m.offerReview(d.item.Name())
-	}
+	m.printAnswer(d, model)
 	return nil
-}
-
-// offerReview offers the reviewer's review of the item named, where the
-// deployment configures a reviewer: the r key takes the offer while the
-// input is empty, until the next thing is sent or the next turn begins;
-// nothing is called until it is taken.
-func (m *model) offerReview(item string) {
-	reviewer := m.s.ReviewerModel()
-	if reviewer == "" {
-		return
-	}
-	m.reviewOffer = item
-	m.print(noteLine("r reviews it with " + reviewer))
 }
 
 // review has the reviewer review what ask names, an item or the last
@@ -963,16 +945,19 @@ func (m *model) printReview(r engine.Review) {
 // changing the turn running. Restored answers use the same presentation.
 // Its findings are in the checks tab, and beneath it one line says how
 // many, one notes the citations resolved on a showing not the
-// conversation's own (viaLine), and one sums up the anchors asked of its
-// revision, listed in the tab too (asksLine); offer offers the tab on f,
-// as at the end of the turn that wrote it.
-func (m *model) printAnswer(d turnDone, model engine.CompanionModel, offer bool) {
+// conversation's own (viaLine), and one quiet footer names the answer,
+// model, usage and check summary (/debug adds the anchor breakdown).
+func (m *model) printAnswer(d turnDone, model engine.CompanionModel) {
 	if strings.TrimSpace(d.text) == "" {
 		// An opening skipped, --no-open, has nothing to say.
 		if d.kind != kindOpening || d.reply.Conversation != "" {
 			m.print(warnLine("the model's answer holds no text"))
 		}
 		return
+	}
+	if d.kind != kindDraft && d.kind != kindCompact && d.kind != kindReload {
+		m.hasNext = hasNextSteps(d.text)
+		m.refreshPlaceholder()
 	}
 	// A blank row between the turn's tool lines, or the engineer's words,
 	// and the answer.
@@ -993,15 +978,17 @@ func (m *model) printAnswer(d turnDone, model engine.CompanionModel, offer bool)
 	for _, v := range d.verdicts {
 		a.verdicts[v.Span] = v
 	}
-	if l := findingsLine(a, offer); l != "" {
+	if l := findingsLine(a); l != "" {
 		m.print(l)
 	}
 	if l := viaLine(d.cites, d.checks); l != "" {
 		m.print(noteLine(l))
 	}
 	m.print(checkNotes(d.check)...)
-	if l := asksLine(a, offer); l != "" {
-		m.print(noteLine(l))
+	if m.debug {
+		if l := asksLine(a); l != "" {
+			m.print(noteLine(l))
+		}
 	}
 	foot := []string{a.label}
 	if model.Name != "" {
@@ -1011,6 +998,12 @@ func (m *model) printAnswer(d turnDone, model engine.CompanionModel, offer bool)
 		foot = append(foot, d.usage)
 	}
 	foot = append(foot, d.check.Words()...)
+	if !m.debug && len(a.asks) > 0 {
+		if !d.check.Revised {
+			foot = append(foot, "asked "+text.Plural(len(a.asks), "anchor"))
+		}
+		foot = append(foot, "/check "+a.label+" lists anchors")
+	}
 	if d.check.Changed() {
 		foot = append(foot, "the original in the turns tab")
 	}
@@ -1029,9 +1022,6 @@ func (m *model) printAnswer(d turnDone, model engine.CompanionModel, offer bool)
 	}
 	m.print(noteLine(strings.Join(foot, " · ")))
 	m.answers = append(m.answers, a)
-	if n, _ := a.findings(); offer && n+len(a.asks) > 0 {
-		m.checkOffer = a.label
-	}
 	if d.reply.Compact {
 		m.print(noteLine("the conversation is long: /compact writes a handoff and goes on in a new one"))
 	}

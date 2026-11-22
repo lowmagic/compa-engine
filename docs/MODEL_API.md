@@ -389,16 +389,14 @@ without it.
   counts them all — each citation flagged, each citation not in the form read, each span flag, arithmetic included,
   each causal wording and command found in no evidence or guidance, each finding the editor flagged and did not
   correct, and each citation the revision added — as
-  `⚠ 8 findings to review · f opens the checks tab` after the turn, taken as the review's offer is (`f` the first key
-  on the empty input, any other input ending it; after a draft both are offered), and as
-  `⚠ 8 findings, 1 judged · /check a1 opens them` otherwise, reopened included; there is none where there are none
-  (`chat.TestFindingsInChecksTab`, `chat.TestAnswerFlagsShown`, `chat.TestChecksSummary`). Warnings, the editor's
-  notes — a revision or follow-up not taken — and the footer stay inline. The anchors a revision was asked to fulfil,
-  revised or failing, are no finding and not counted: one line sums them up by kind, most first,
-  `asked of the revision: 13 anchors: 9 misattributed, 4 unsupported · f opens the checks tab`, or
-  `· /check a1 lists them` where `f` is not offered, the anchors themselves listed in the checks tab, live and
+  `⚠ 8 findings · /check a1 opens them`, or
+  `⚠ 8 findings, 1 judged · /check a1 opens them` once judged, live and reopened alike; there is none where there are none
+  (`chat.TestFindingsInChecksTab`, `chat.TestAnswerFlagsShown`, `chat.TestChecksSummary`, `chat.TestLeadingFTypesNormallyAndCheckOpensDraftFindings`). Warnings, the editor's
+  notes — a revision or follow-up not taken — and the single quiet footer stay inline. The anchors a revision was asked to fulfil,
+  revised or failing, are no finding and not counted: the footer notes `/check a1 lists anchors`, and under `/debug` one line sums them up by kind, most first,
+  `asked of the revision: 13 anchors: 9 misattributed, 4 unsupported · /check a1 lists them`, the anchors themselves listed in the checks tab, live and
   reopened (`chat.TestEditorAnchorShown`, `TestAsksLineSumsUp`); `compa ask`, which has no checks tab, lists each beneath
-  the answer (`cli_test.TestAskPrintsTheCheck`). `f`, or `/check [aN]` for
+  the answer (`cli_test.TestAskPrintsTheCheck`). `/check [aN]` for
   any answer, live or reopened, opens the browser's checks tab (`docs/ARCHITECTURE.md` §The evidence browser) at that
   answer's first span not judged, else its first finding; nothing is printed into the chat while it is open. It lists
   every finding of the answers printed this run, by answer: first the span flags, those with no close line and the
@@ -506,9 +504,8 @@ without it.
   its own, and its calls pass the gate, redaction and barred-accounts rule and count in the case's usage. A deployment
   with no `editor` profile runs no editor.
 - **The reviewer.** A second opinion on request, from the model the `reviewer` profile names (conversation kind
-  `review`, task `answers.review`, profile class `reviewer`): `/review` reviews the last answer as shown, `/review iN`
-  an item, and after every draft kept the chat offers it on `r`, taken only as the first key on the empty input and
-  ended by any other input. Nothing is called until the engineer asks. It is given the text under review, its
+  `review`, task `answers.review`, profile class `reviewer`): `/review` reviews the last answer as shown and `/review iN`
+  an item (`chat.TestReviewCommand`, `chat.TestLeadingRTypesNormallyAfterDraft`). Nothing is called until the engineer asks. It is given the text under review, its
   statements and the items cited, quoted as the editor's are (§Quoted lines), never the conversation; its prompt
   includes `customer.md`'s four questions, and each finding gives the claim, why, its lines, the strongest material
   alternative, the missing discriminator and the most the lines would support; it corrects nothing, and a claim held

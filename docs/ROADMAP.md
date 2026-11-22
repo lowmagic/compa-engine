@@ -237,3 +237,22 @@ in 1, 1 and 2 calls, and one ended that answer with new lists numbered from 1. A
 cut the lists' text, counted 2, 3 and 1 numbered steps and one unnumbered item each. Before the prompt said to end
 every answer so, a short answer carried no numbered list in two runs of two, and the companion answered "1" by saying
 it had numbered nothing. It is the model's behaviour on one synthetic case: nothing in the engine reads the lists.
+
+## 16. Restrained Markdown, lettered next steps and quiet chat footers
+
+Status: done
+
+Answers render with restrained Markdown — tiered headings (`#` underlined, `##` coloured, `###` plain bold), plain `-`
+lists, child and continuation paragraphs aligned under their parent item's text, indented fenced code blocks preserving
+`#` lines with fence markers hidden, and routine `- **Label:**` bullet bolding stripped — and prompt next steps with
+capital letters (`A.`–`D.`) under `Next (enter a letter, or ask a question):` while accepting uppercase or lowercase
+replies. The empty input cues next-step letters when the latest answer offered them, bare `f` and `r` single-key
+interception is removed so ordinary messages beginning with `f` or `r` never trigger checks or paid reviews, and
+post-answer metadata collapses to a single quiet footer line.
+
+Delivers: The companion, User interface.
+
+Done when: `make check` passes; `chat.TestMarkdownRestrainedHierarchyAndNesting` verifies tiered headings, nested list
+and continuation alignment, and indented fenced `#` lines; `chat.TestInputPlaceholderTracksNextSteps` verifies the
+context-aware reply cue; and `chat.TestLeadingRTypesNormallyAfterDraft` and
+`chat.TestLeadingFTypesNormallyAndCheckOpensDraftFindings` verify normal input without single-key interception.

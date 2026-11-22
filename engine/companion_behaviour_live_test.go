@@ -1351,15 +1351,15 @@ func liveRecovery(t *testing.T, s *Session) string {
 }
 
 var (
-	liveNextHead = regexp.MustCompile(`(?i)^\W*next:\W*$`)
+	liveNextHead = regexp.MustCompile(`(?i)^\W*next(?:\s*\([^)]*\))?:\W*$`)
 	liveForYou   = regexp.MustCompile(`(?i)^\W*for you:\W*$`)
-	liveNumbered = regexp.MustCompile(`^\s*\d+[.)]\s+\S`)
+	liveLettered = regexp.MustCompile(`^\s*[A-D][.)]\s+\S`)
 	liveDashed   = regexp.MustCompile(`^\s*[-*]\s+\S`)
 )
 
 // liveNextSteps is the prompt's next steps: a question on one capture of a
 // node with a full disk, which also holds outputs the question does not
-// need, then the engineer answering "1". It measures the lists the first
+// need, then the engineer answering "a". It measures the lists the first
 // answer ends with, and what the second turn runs.
 func liveNextSteps(t *testing.T, s *Session) string {
 	t.Helper()
@@ -1386,7 +1386,7 @@ func liveNextSteps(t *testing.T, s *Session) string {
 	// Each line of the answer belongs to the list whose heading came last;
 	// the report gives the lists' lines as written, whatever the answer's
 	// length before them.
-	list, next, mine, numberedMine, elsewhere := "", 0, 0, 0, 0
+	list, next, mine, letteredMine, elsewhere := "", 0, 0, 0, 0
 	hasNext, hasMine := false, false
 	var lists []string
 	for _, l := range strings.Split(reply.Text, "\n") {
@@ -1395,11 +1395,11 @@ func liveNextSteps(t *testing.T, s *Session) string {
 			list, hasNext = "next", true
 		case liveForYou.MatchString(l):
 			list, hasMine = "mine", true
-		case liveNumbered.MatchString(l) && list == "next":
+		case liveLettered.MatchString(l) && list == "next":
 			next++
-		case liveNumbered.MatchString(l) && list == "mine":
-			numberedMine++
-		case liveNumbered.MatchString(l):
+		case liveLettered.MatchString(l) && list == "mine":
+			letteredMine++
+		case liveLettered.MatchString(l):
 			elsewhere++
 		case liveDashed.MatchString(l) && list == "mine":
 			mine++
@@ -1409,10 +1409,10 @@ func liveNextSteps(t *testing.T, s *Session) string {
 		}
 	}
 	calls := &liveCalls{}
-	second, err := s.Talk(ctx, "1", calls.on)
+	second, err := s.Talk(ctx, "a", calls.on)
 	if err != nil {
 		t.Fatal(err)
 	}
-	return fmt.Sprintf("Next: %v, %d numbered; For you: %v, %d items, %d of them numbered; %d numbered lines elsewhere\n\nanswer: %s\n\nits lists:\n%s\nafter \"1\": %d tool calls\n%sanswer: %s",
-		hasNext, next, hasMine, mine, numberedMine, elsewhere, liveFlat(reply.Text, 400), liveList(lists), len(calls.calls), calls, liveFlat(second.Text, 400))
+	return fmt.Sprintf("Next: %v, %d lettered; For you: %v, %d items, %d of them lettered; %d lettered lines elsewhere\n\nanswer: %s\n\nits lists:\n%s\nafter \"a\": %d tool calls\n%sanswer: %s",
+		hasNext, next, hasMine, mine, letteredMine, elsewhere, liveFlat(reply.Text, 400), liveList(lists), len(calls.calls), calls, liveFlat(second.Text, 400))
 }

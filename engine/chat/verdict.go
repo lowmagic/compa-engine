@@ -186,10 +186,10 @@ func asked(c engine.AnswerCheck) []reading {
 	return out
 }
 
-// asksLine is the one line beneath an answer whose revision was asked to
-// fulfil anchors: how many, by kind, most first, and what opens them in
-// the checks tab, f where it is offered; empty where there are none.
-func asksLine(a answer, offered bool) string {
+// asksLine is the one line under /debug beneath an answer whose revision was
+// asked to fulfil anchors: how many, by kind, most first, and what opens them
+// in the checks tab; empty where there are none.
+func asksLine(a answer) string {
 	if len(a.asks) == 0 {
 		return ""
 	}
@@ -213,9 +213,6 @@ func asksLine(a answer, offered bool) string {
 		head += ", all " + kinds[0]
 	default:
 		head += ", " + kinds[0]
-	}
-	if offered {
-		return head + " · f opens the checks tab"
 	}
 	return head + " · /check " + a.label + " lists them"
 }
@@ -253,25 +250,18 @@ func (a answer) findings() (n, judged int) {
 }
 
 // findingsLine is the one line beneath an answer with findings: how many,
-// how many of them judged, and what opens them in the checks tab, f where
-// it is offered; empty where there are none.
-func findingsLine(a answer, offered bool) string {
+// how many of them judged, and /check to open them in the checks tab; empty
+// where there are none.
+func findingsLine(a answer) string {
 	n, judged := a.findings()
 	if n == 0 {
 		return ""
 	}
 	head := "⚠ " + text.Plural(n, "finding")
-	switch {
-	case judged > 0:
+	if judged > 0 {
 		head += ", " + strconv.Itoa(judged) + " judged"
-	case offered:
-		head += " to review"
 	}
-	how := " · /check " + a.label + " opens them"
-	if offered {
-		how = " · f opens the checks tab"
-	}
-	return warnW.Render(head) + faintW.Render(how)
+	return warnW.Render(head) + faintW.Render(" · /check "+a.label+" opens them")
 }
 
 // verdictMsg is the verdict kept on a span of the answer labelled, or why

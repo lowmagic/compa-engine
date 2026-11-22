@@ -171,7 +171,7 @@ func (m *model) restoreHistory(h historyMsg) {
 			switch {
 			case entry.shownAnswer():
 				m.printAnswer(turnDone{text: message.Text, cites: entry.cites, checks: entry.checks,
-					checkErr: h.checkErr, flags: entry.flags, flagErr: h.flagErr, verdicts: entry.verdicts, usage: entry.usage, check: entry.check}, entry.model, false)
+					checkErr: h.checkErr, flags: entry.flags, flagErr: h.flagErr, verdicts: entry.verdicts, usage: entry.usage, check: entry.check}, entry.model)
 			case len(message.Calls) > 0 && strings.TrimSpace(message.Text) != "":
 				m.print(markdown(text.Safe(message.Text), m.cols(), marksOf(entry.cites, entry.checks)))
 			}
