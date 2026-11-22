@@ -115,13 +115,16 @@ func ledgerOutcomes(c *openCase) (map[string]string, error) {
 const ledgerViewIntro = "A model's reading of the case's comments: what each asks, commits to, reports or provides, and what later comments made of it. Not verified and never evidence."
 
 // RenderLedger is the case ledger as the engineer is shown it: the open
-// asks by who owes them and the pending commitments, then every comment
-// in the case's order under its number, author, who they are, visibility,
-// time in loc and evidence name, with its items and their statuses; a
-// comment that gave none is one line saying why. Items the engineer marked
-// wrong are left out. Nothing is left out for length.
+// asks grouped by who is awaited, the pending commitments grouped by side,
+// then every comment in the case's order under its number, author, who they
+// are, visibility, time in loc and evidence name, with compact-tag items
+// ([ask], [commit], [report], [provide]) and their statuses in trailing
+// parentheses; a comment that gave none is one line saying why. Items the
+// engineer marked wrong are left out. Nothing is left out for length.
 func RenderLedger(comments []LedgerComment, items []LedgerItem, loc *time.Location, supportName, supportRole string) string {
-	var owedCustomer, owedSupport, pending []LedgerItem
+	supportName = strings.Join(strings.Fields(supportName), " ")
+	supportRole = strings.Join(strings.Fields(supportRole), " ")
+	var awaitCustomer, awaitSupport, commitSupport, commitCustomer []LedgerItem
 	byNumber := map[int][]LedgerItem{}
 	settles := map[int][]string{}
 	var unnumbered []LedgerItem
@@ -131,14 +134,16 @@ func RenderLedger(comments []LedgerComment, items []LedgerItem, loc *time.Locati
 		}
 		switch {
 		case it.Open() && it.Kind == ledger.Asks && it.Who == AuthorSupport:
-			owedCustomer = append(owedCustomer, it)
+			awaitCustomer = append(awaitCustomer, it)
 		case it.Open() && it.Kind == ledger.Asks:
-			owedSupport = append(owedSupport, it)
+			awaitSupport = append(awaitSupport, it)
+		case it.Open() && it.Who == AuthorSupport:
+			commitSupport = append(commitSupport, it)
 		case it.Open():
-			pending = append(pending, it)
+			commitCustomer = append(commitCustomer, it)
 		}
 		if it.StatusByNumber > 0 {
-			settles[it.StatusByNumber] = append(settles[it.StatusByNumber], it.ID+" "+strings.ReplaceAll(it.Status, "_", " "))
+			settles[it.StatusByNumber] = append(settles[it.StatusByNumber], settledRef(it))
 		}
 		if it.Number == 0 {
 			unnumbered = append(unnumbered, it)
@@ -148,25 +153,34 @@ func RenderLedger(comments []LedgerComment, items []LedgerItem, loc *time.Locati
 	}
 	var b strings.Builder
 	b.WriteString("# Case ledger\n\n" + ledgerViewIntro + "\n")
-	if len(owedCustomer)+len(owedSupport) > 0 {
+	if len(awaitCustomer)+len(awaitSupport) > 0 {
 		b.WriteString("\n## Open asks\n")
 		for _, g := range []struct {
 			who   string
 			items []LedgerItem
-		}{{"the customer", owedCustomer}, {supportName, owedSupport}} {
+		}{{"customer", awaitCustomer}, {supportName, awaitSupport}} {
 			if len(g.items) == 0 {
 				continue
 			}
-			b.WriteString("\nOwed by " + g.who + ":\n")
+			b.WriteString("\nAwaiting " + g.who + ":\n")
 			for _, it := range g.items {
 				b.WriteString(viewLine(it, true, supportName) + "\n")
 			}
 		}
 	}
-	if len(pending) > 0 {
-		b.WriteString("\n## Pending commitments\n\n")
-		for _, it := range pending {
-			b.WriteString(viewLine(it, true, supportName) + "\n")
+	if len(commitSupport)+len(commitCustomer) > 0 {
+		b.WriteString("\n## Pending commitments\n")
+		for _, g := range []struct {
+			who   string
+			items []LedgerItem
+		}{{supportName, commitSupport}, {"customer", commitCustomer}} {
+			if len(g.items) == 0 {
+				continue
+			}
+			b.WriteString("\nBy " + g.who + ":\n")
+			for _, it := range g.items {
+				b.WriteString(viewLine(it, true, supportName) + "\n")
+			}
 		}
 	}
 	if len(comments)+len(unnumbered) == 0 {
@@ -206,6 +220,31 @@ func RenderLedger(comments []LedgerComment, items []LedgerItem, loc *time.Locati
 	return b.String()
 }
 
+// settledRef describes an earlier item settled by a later comment without
+// exposing internal lN identifiers.
+func settledRef(it LedgerItem) string {
+	noun := kindNoun(it.Kind)
+	status := strings.ReplaceAll(it.Status, "_", " ")
+	if ref := commentRef(it.Number, it.Comment); ref != "" {
+		return ref + " " + noun + " (" + status + ")"
+	}
+	return noun + " (" + status + ")"
+}
+
+func kindNoun(kind string) string {
+	switch kind {
+	case ledger.Asks:
+		return "ask"
+	case ledger.Commits:
+		return "commit"
+	case ledger.Reports:
+		return "report"
+	case ledger.Provides:
+		return "provide"
+	}
+	return kind
+}
+
 // outcomeShown says in a few words why a comment gave no item.
 func outcomeShown(o string, settled []string) string {
 	switch {
@@ -231,27 +270,32 @@ func outcomeShown(o string, settled []string) string {
 	return o
 }
 
-// viewLine is an item as the engineer's view shows it, its comment by
-// number where whose, its status said where it has one.
-func viewLine(it LedgerItem, whose bool, supportName string) string {
+// viewLine is an item as the engineer's view shows it: compact tag ([ask],
+// [commit], [report], [provide]), no lN ID or per-line actor, cleaned of
+// duplicate leading verbs, with comment reference or settled status in
+// trailing parentheses.
+func viewLine(it LedgerItem, withComment bool, supportName string) string {
 	var b strings.Builder
-	b.WriteString("- " + it.ID)
-	if whose {
-		b.WriteString(" · " + commentRef(it.Number, it.Comment))
-	}
-	b.WriteString(" · " + whoShown(it.Who, supportName) + " " + it.Kind)
-	if it.Attachment != "" {
-		b.WriteString(" " + it.Attachment)
+	b.WriteString("- [" + kindNoun(it.Kind) + "] ")
+	body := cleanLedgerText(it.Text, supportName)
+	switch {
+	case it.Attachment != "" && body != "":
+		b.WriteString(it.Attachment + ": " + body)
+	case it.Attachment != "":
+		b.WriteString(it.Attachment)
+	default:
+		b.WriteString(body)
 	}
 	if it.Due != "" {
-		b.WriteString(", due " + it.Due)
+		b.WriteString(" (due " + strings.Join(strings.Fields(it.Due), " ") + ")")
 	}
-	if it.Status != "" && !it.Open() && it.Status != ledger.Superseded {
-		b.WriteString(", " + strings.ReplaceAll(it.Status, "_", " ") + statusByShown(it))
+	if withComment {
+		if ref := commentRef(it.Number, it.Comment); ref != "" {
+			b.WriteString(" (" + ref + ")")
+		}
 	}
-	b.WriteString(": " + strings.Join(strings.Fields(it.Text), " "))
-	if it.Status == ledger.Superseded {
-		b.WriteString(" (superseded" + statusByShown(it) + ")")
+	if it.Status != "" && !it.Open() {
+		b.WriteString(" (" + strings.ReplaceAll(it.Status, "_", " ") + statusInShown(it) + ")")
 	}
 	if it.Corrected != "" {
 		b.WriteString(" [corrected by the engineer]")
@@ -259,14 +303,62 @@ func viewLine(it LedgerItem, whose bool, supportName string) string {
 	return b.String()
 }
 
-// statusByShown is what settled an item, its comment by number.
-func statusByShown(it LedgerItem) string {
+// cleanLedgerText collapses whitespace and strips redundant leading actor and
+// kind-verb prefixes ("asks why...", "reports no...", "customer reports: ...")
+// from stored ledger item text.
+func cleanLedgerText(raw, supportName string) string {
+	s := strings.Join(strings.Fields(raw), " ")
+	if s == "" {
+		return ""
+	}
+	actors := []string{"the customer ", "customer ", "support "}
+	if supportName != "" {
+		actors = append([]string{supportName + " "}, actors...)
+	}
+	for {
+		changed := false
+		lower := strings.ToLower(s)
+		trimmedActor := s
+		for _, a := range actors {
+			if al := strings.ToLower(a); strings.HasPrefix(lower, al) {
+				trimmedActor = strings.TrimSpace(s[len(a):])
+				break
+			}
+		}
+		for _, candidate := range []string{trimmedActor, s} {
+			cl := strings.ToLower(candidate)
+			for _, prefix := range []string{
+				"asks: ", "asks ",
+				"reports that ", "reports: ", "reports ",
+				"commits to ", "commits: ",
+				"provides: ", "provides ",
+			} {
+				if strings.HasPrefix(cl, prefix) {
+					if rest := strings.TrimSpace(candidate[len(prefix):]); rest != "" {
+						s, changed = rest, true
+						break
+					}
+				}
+			}
+			if changed {
+				break
+			}
+		}
+		if !changed {
+			return s
+		}
+	}
+}
+
+// statusInShown formats who or which comment settled an item for trailing
+// parentheticals such as "(answered in c#3)".
+func statusInShown(it LedgerItem) string {
 	s := ""
 	switch {
 	case it.StatusByID == "engineer":
 		s = " by the engineer"
 	case it.StatusBy != "":
-		s = " by " + commentRef(it.StatusByNumber, it.StatusBy)
+		s = " in " + commentRef(it.StatusByNumber, it.StatusBy)
 	}
 	if it.StatusNote != "" {
 		s += ": " + strings.Join(strings.Fields(it.StatusNote), " ")

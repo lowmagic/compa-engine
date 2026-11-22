@@ -158,10 +158,14 @@ func draftWords(in config.Intention, supportName string) string {
 }
 
 // SupportName is the configured name of the support organization.
-func (s *CaseStore) SupportName() string { return s.e.config.SupportName() }
+func (s *CaseStore) SupportName() string {
+	return strings.Join(strings.Fields(s.e.config.SupportName()), " ")
+}
 
 // SupportRole is what the deployment calls a support author as a person.
-func (s *CaseStore) SupportRole() string { return s.e.config.SupportRole() }
+func (s *CaseStore) SupportRole() string {
+	return strings.Join(strings.Fields(s.e.config.SupportRole()), " ")
+}
 
 // Pin keeps the conversation's last answer as an item.
 func (s *Session) Pin(ctx context.Context) (CompanionItem, error) {

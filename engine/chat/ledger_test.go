@@ -16,7 +16,7 @@ func TestLedgerCommand(t *testing.T) {
 	h := start(t, s, Options{NoOpen: true})
 	h.say("/ledger")
 	out := flat(h.out())
-	for _, want := range []string{"Case ledger", "Owed by the customer:", "Send a fresh must-gather.", "A synthetic report: it started after the upgrade."} {
+	for _, want := range []string{"Case ledger", "Awaiting customer:", "[ask] Send a fresh must-gather. (c#3)", "[report] A synthetic report: it started after the upgrade."} {
 		if !strings.Contains(out, want) {
 			t.Errorf("/ledger printed no %q:\n%s", want, h.out())
 		}

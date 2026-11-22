@@ -562,12 +562,12 @@ of it: items, a change, none with why, or `unaccounted` where the update said no
 accepted marks nothing read. Items from a comment the engineer later leaves out of what models read are left out of
 what the ledger shows and of its next calls.
 
-**Shown.** `/ledger` reads what is unread, then shows the open asks by who owes them, the pending commitments, and
+**Shown.** `/ledger` reads what is unread, then shows the open asks grouped under `Awaiting customer:` and `Awaiting <Support>:`, the pending commitments grouped under `By <Support>:` and `By customer:`, and
 every comment of the case, oldest first, numbered as the case numbers them, `c#1` for the oldest by when it was
 written, an edited or excluded comment keeping its number. A comment with items is headed by its number, its author's
 name, the configured `companion.supportRole`, `Customer` or `Automated`, `Public`, `Private` or `Partner`, when it was written in the engineer's
 zone, and its evidence name, `### c#8 · Jo Synthetic · Customer · Public · Oct 29, 2026, 11:27 AM EDT · e8`, its items
-under it with their statuses, a settled one naming the comment that settled it by number. A comment that gave none is
+under it with compact `[ask]`, `[commit]`, `[report]` or `[provide]` tags (with no `lN` item IDs, no repeated actor names and redundant leading kind verbs stripped) and their statuses in trailing parentheses such as `(answered in c#3)`. A comment that gave none is
 one line saying why: `nothing: courtesy` and the model's other reasons, not accounted for by the model, not read
 for being too long to show the ledger's model, not read yet, left out by an exclusion rule, or read as an earlier
 version. What the source does not say is left out

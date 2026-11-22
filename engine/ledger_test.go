@@ -561,8 +561,8 @@ func TestRenderLedgerByComment(t *testing.T) {
 	text := RenderLedger(comments, items, est, "Acme Care", "Acme Agent")
 	want := `## Open asks
 
-Owed by Acme Care:
-- l3 · c#3 · customer asks: When will engineering reply?
+Awaiting Acme Care:
+- [ask] When will engineering reply? (c#3)
 
 ## Comments
 
@@ -570,19 +570,38 @@ c#1 · Sam Synthetic · Acme Agent · Private · Oct 29, 2026, 11:27 AM EST · e
 
 ### c#2 · Sam Synthetic · Acme Agent · Private · Oct 29, 2026, 11:27 AM EST · e5
 
-- l1 · Acme Care asks, answered by c#3: Was the SFP swapped at runtime?
+- [ask] Was the SFP swapped at runtime? (answered in c#3)
 
 ### c#3 · Jo Synthetic · Customer · Public · Oct 29, 2026, 10:27 AM EST · e2
 
-- l2 · customer reports: Yes, the SFP is hot-swappable.
-- l3 · customer asks: When will engineering reply?
-- settles l1 answered
+- [report] Yes, the SFP is hot-swappable.
+- [ask] When will engineering reply?
+- settles c#2 ask (answered)
 
 c#4 · A Bot · Automated · Partner · Oct 29, 2026, 12:27 PM EST · e3 · nothing: nothing new
 c#5 · e4 · not read yet
 `
 	if _, got, ok := strings.Cut(text, "## Open asks"); !ok || "## Open asks"+got != want {
 		t.Errorf("the view (-want +got):\n%s", cmp.Diff(want, "## Open asks"+got))
+	}
+	// Legacy stored rows with duplicate verbs and extra support whitespace
+	// render cleanly with compact tags, grouped commitments and no lN IDs.
+	legacy := RenderLedger(comments[1:3], []LedgerItem{
+		{ID: "l7", Kind: ledger.Asks, Who: AuthorSupport, Text: "asks why the PG count was increased and whether OSDs were added to the cluster", Comment: "e5", Number: 2, From: sam, Status: ledger.Answered, StatusBy: "e2", StatusByNumber: 3},
+		{ID: "l8", Kind: ledger.Reports, Who: AuthorCustomer, Text: "customer reports: reports no new OSD was added when increasing PG count from 256 to 1024", Comment: "e2", Number: 3, From: jo},
+		{ID: "l9", Kind: ledger.Commits, Who: AuthorSupport, Text: "Red  Hat commits to review the OSD map", Due: "Friday", Comment: "e5", Number: 2, From: sam, Status: ledger.Pending},
+	}, est, "Red  Hat", "Associate")
+	for _, wantSub := range []string{
+		"## Pending commitments\n\nBy Red Hat:\n- [commit] review the OSD map (due Friday) (c#2)\n",
+		"- [ask] why the PG count was increased and whether OSDs were added to the cluster (answered in c#3)",
+		"- [report] no new OSD was added when increasing PG count from 256 to 1024",
+	} {
+		if !strings.Contains(legacy, wantSub) {
+			t.Errorf("legacy ledger view lacks %q:\n%s", wantSub, legacy)
+		}
+	}
+	if strings.Contains(legacy, "l7") || strings.Contains(legacy, "Red  Hat") || strings.Contains(legacy, "asks why") || strings.Contains(legacy, "reports no") {
+		t.Errorf("legacy ledger view kept lN ID, extra spaces or duplicate verb:\n%s", legacy)
 	}
 	// The conversation's text names each comment by its evidence name first,
 	// then its number, in UTC.

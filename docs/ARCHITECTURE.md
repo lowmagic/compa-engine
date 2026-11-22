@@ -161,7 +161,7 @@ Commands:
 - `/experts` — the installed experts, with those loaded.
 - `/evidence [eN[:lines]]` — open the browser (§The evidence browser): at that item and those lines, or, with none given, at the last answer's first citation.
 - `/comments [N]` — the case's comments, or one.
-- `/ledger` — the case ledger (`docs/MODEL_API.md` §The case ledger): the comments it has not read read first, with no model call when there are none; then the open asks by who owes them, the pending commitments, and every comment in the case's order by its number (`c#8`), author, what the deployment calls a support author (`companion.supportRole`, `Support` by default) or Customer, visibility, time and evidence name, with its items, or in one line why it gave none.
+- `/ledger` — the case ledger (`docs/MODEL_API.md` §The case ledger): the comments it has not read read first, with no model call when there are none; then the open asks grouped by who is awaited, the pending commitments by side, and every comment in the case's order by its number (`c#8`), author, what the deployment calls a support author (`companion.supportRole`, `Support` by default) or Customer, visibility, time and evidence name, with compact `[ask]`, `[commit]`, `[report]`, `[provide]` items, or in one line why it gave none.
 - `/pin` — keep the last answer as an item.
 - `/items` — open the browser on its items tab: the pinned answers and drafts.
 - `/copy [item]` — copy an item, the last by default, to the clipboard through OSC 52, which reaches it over SSH.

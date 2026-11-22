@@ -256,3 +256,19 @@ Done when: `make check` passes; `chat.TestMarkdownRestrainedHierarchyAndNesting`
 and continuation alignment, and indented fenced `#` lines; `chat.TestInputPlaceholderTracksNextSteps` verifies the
 context-aware reply cue; and `chat.TestLeadingRTypesNormallyAfterDraft` and
 `chat.TestLeadingFTypesNormallyAndCheckOpensDraftFindings` verify normal input without single-key interception.
+
+## 17. Compact-tag case ledger without item IDs or duplicate verbs
+
+Status: done
+
+`/ledger` (`engine.RenderLedger`) renders open asks under `Awaiting customer:` and `Awaiting <Support>:`, pending
+commitments under `By <Support>:` and `By customer:`, and comment items under compact `[ask]`, `[commit]`, `[report]`
+and `[provide]` tags with trailing `(answered in c#N)` statuses — dropping `lN` IDs and per-line actor names that the
+section or comment header already gives. `ledger_update` instructs the model not to open `text` with redundant actor or
+kind verbs, and `RenderLedger` deterministically strips leading duplicate `<who> <verb>` prefixes and normalizes
+configured support whitespace on stored rows too.
+
+Delivers: The companion, User interface.
+
+Done when: `make check` passes; and `engine.TestRenderLedgerByComment` and `chat.TestLedgerCommand` verify compact-tag
+rendering on both fresh and legacy stored ledger rows.
