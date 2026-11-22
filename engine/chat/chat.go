@@ -178,6 +178,7 @@ func newModel(s *engine.Session, o Options, spawn spawnFunc) *model {
 	m := &model{s: s, noOpen: o.NoOpen, spawn: spawn, input: in, width: 80, height: 24,
 		println: func(s string) tea.Cmd { return tea.Println(s) }}
 	m.activity = spinner.New(spinner.WithSpinner(spinner.MiniDot), spinner.WithStyle(stateW))
+	m.completion.args = m.argOptions
 	// An error here leaves the status line without the model; the first
 	// turn says what is wrong.
 	m.current, _ = s.CompanionModel()

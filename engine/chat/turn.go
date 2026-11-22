@@ -109,12 +109,15 @@ type toolRun struct {
 // them by span, its findings that take no verdict, and the anchors asked
 // of its revision, which are no finding, for the checks tab.
 type answer struct {
-	label    string
-	cites    []engine.Cite
-	flags    []engine.AnswerFlag
-	verdicts map[string]engine.SpanVerdict
-	reads    []reading
-	asks     []reading
+	label string
+	// draft is a draft's mode, empty for an answer, and preview the
+	// start of the text shown, for /copy's options.
+	draft, preview string
+	cites          []engine.Cite
+	flags          []engine.AnswerFlag
+	verdicts       map[string]engine.SpanVerdict
+	reads          []reading
+	asks           []reading
 }
 
 // Messages a turn sends as it runs, and its end.
@@ -959,7 +962,13 @@ func (m *model) printAnswer(d turnDone, model engine.CompanionModel) {
 		m.print(warnLine("the answer's own checks could not run: " + d.flagErr.Error()))
 	}
 	a := answer{label: "a" + strconv.Itoa(len(m.answers)+1), flags: d.flags, verdicts: map[string]engine.SpanVerdict{},
-		reads: readings(d.cites, d.checks, d.flags, d.check), asks: asked(d.check)}
+		reads: readings(d.cites, d.checks, d.flags, d.check), asks: asked(d.check), preview: preview(shownText)}
+	if d.kind == kindDraft {
+		a.draft = d.item.Intention
+		if a.draft == "" {
+			a.draft = d.draftIntention
+		}
+	}
 	for _, c := range d.cites {
 		if c.Name != "" {
 			a.cites = append(a.cites, c)

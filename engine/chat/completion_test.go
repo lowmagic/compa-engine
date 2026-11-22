@@ -280,3 +280,87 @@ func TestInputPlaceholderTracksNextSteps(t *testing.T) {
 		t.Errorf("placeholder after plain answer = %q, want %q", got, hintAsk)
 	}
 }
+
+// TestArgumentPopovers: a command's arguments show in the popover once its
+// name and a space are typed, never in the transcript and calling no
+// model: tab on /dr completes /draft and lists the modes, tab on a mode
+// leaves it to take steering and closes the list; /model lists the models,
+// tab on one with efforts lists them and enter switches; /debug lists its
+// arguments, filtered as typed, enter running the one chosen; /copy lists
+// the answers newest first, enter copying the one chosen.
+func TestArgumentPopovers(t *testing.T) {
+	h := start(t, session(t, "case.json"), Options{NoOpen: true})
+	transcript, calls := flat(h.out()), len(h.m.records)
+	h.typed("/dr")
+	h.press("tab")
+	if got, v := h.m.input.Value(), h.view(); got != "/draft " || !strings.Contains(v, "› customer-update — Customer update, for the customer") {
+		t.Fatalf("tab on /dr: input %q, view:\n%s", got, v)
+	}
+	h.press("tab")
+	if got, v := h.m.input.Value(), h.view(); got != "/draft customer-update " || strings.Contains(v, "tab complete") {
+		t.Fatalf("tab on the mode: input %q, view:\n%s", got, v)
+	}
+	if flat(h.out()) != transcript || h.m.turn != nil || len(h.m.records) != calls {
+		t.Fatal("the draft popover printed or called a model")
+	}
+	h.m.input.Reset()
+
+	h.typed("/model ")
+	if v := h.view(); !strings.Contains(v, "› fixture-model — efforts low, high") || !strings.Contains(v, "other-model — efforts medium") {
+		t.Fatalf("/model lists:\n%s", v)
+	}
+	h.press("tab")
+	if got, v := h.m.input.Value(), h.view(); got != "/model fixture-model " || !strings.Contains(v, "› low") || !strings.Contains(v, "high") {
+		t.Fatalf("tab on the model: input %q, view:\n%s", got, v)
+	}
+	h.press("down", "enter")
+	h.settle()
+	if out := h.out(); !strings.Contains(out, "the next calls use fixture-model effort high") || h.m.input.Value() != "" {
+		t.Fatalf("enter on the effort: input %q, printed:\n%s", h.m.input.Value(), out)
+	}
+
+	h.typed("/debug ")
+	for _, want := range []string{"› on — ", "off — ", "usage — ", "experts — "} {
+		if !strings.Contains(h.view(), want) {
+			t.Errorf("/debug lists no %q:\n%s", want, h.view())
+		}
+	}
+	h.typed("o")
+	if v := h.view(); !strings.Contains(v, "› on — ") || strings.Contains(v, "usage — ") {
+		t.Fatalf("/debug o lists:\n%s", v)
+	}
+	h.press("enter")
+	h.settle()
+	if !h.m.debug || h.m.input.Value() != "" {
+		t.Fatalf("enter on /debug on: debug %v, input %q", h.m.debug, h.m.input.Value())
+	}
+
+	h.say("which model?")
+	h.typed("/copy ")
+	if v := h.view(); !strings.Contains(v, "› a1 — The first model answers.") {
+		t.Fatalf("/copy lists:\n%s", v)
+	}
+	h.press("enter")
+	h.settle()
+	if len(h.teaMsgs) != 1 || !strings.Contains(h.out(), "asked the terminal to copy a1") {
+		t.Errorf("enter on a1 asked of the terminal %v:\n%s", h.teaMsgs, h.out())
+	}
+	if strings.Contains(h.out(), "› a1 —") || strings.Contains(h.out(), "efforts low, high") {
+		t.Errorf("a popover's rows entered the transcript:\n%s", h.out())
+	}
+}
+
+// TestCompletionExactArgumentRuns: enter on an argument typed whole runs
+// it as typed though a longer one shares its start; on a partial one it
+// runs the option chosen.
+func TestCompletionExactArgumentRuns(t *testing.T) {
+	c := commandCompletion{args: func(string) []completionOption {
+		return []completionOption{{complete: "/copy a10", run: "/copy a10", label: "a10"}, {complete: "/copy a1", run: "/copy a1", label: "a1"}}
+	}}
+	if got, handled, submit := c.key("/copy a1", "enter"); got != "/copy a1" || handled || submit {
+		t.Errorf("enter on /copy a1 = (%q, %v, %v)", got, handled, submit)
+	}
+	if got, handled, submit := c.key("/copy a", "enter"); got != "/copy a10" || !handled || !submit {
+		t.Errorf("enter on /copy a = (%q, %v, %v)", got, handled, submit)
+	}
+}

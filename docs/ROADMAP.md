@@ -322,3 +322,16 @@ Delivers: User interface.
 Done when: `make check` passes; `chat.TestDraftKeptAndCopied` verifies `/copy`, `ctrl+y` and a refused `/copy a9`;
 `chat.TestReopenIsQuiet`, `TestReopenLines` and `TestCompactInCase` verify the quiet reopen and `/compact`;
 `chat.TestDebugCommands` and `TestCompletionKeys` verify `/debug`'s arguments and the menu.
+
+## 21. Argument popovers
+
+Status: done
+
+Past a command's name and a space, the `/` list offers its arguments, filtered as typed and never printed: `/draft`'s
+modes, `/copy`'s answers newest first with the start of each, `/model`'s models then the chosen model's efforts, and
+`/debug`'s arguments. Enter runs the option chosen and tab completes it; an argument typed whole runs as typed.
+
+Delivers: User interface.
+
+Done when: `make check` passes; `chat.TestArgumentPopovers` verifies each command's options, tab and enter, and that
+no row enters the transcript; `chat.TestCompletionExactArgumentRuns` verifies an argument typed whole runs as typed.

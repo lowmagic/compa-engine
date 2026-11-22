@@ -138,6 +138,93 @@ func (m *model) command(line string) bool {
 	return true
 }
 
+// argOptions are the argument options for input, a command's name and a
+// space, then what of its arguments is typed: /draft's modes, /copy's
+// answers newest first, /model's models then a model's efforts, and
+// /debug's arguments. Each mode, answer, model or argument runs on
+// enter; tab completes it, a mode to take steering after it and a model
+// with efforts to offer them.
+func (m *model) argOptions(input string) []completionOption {
+	name, rest, ok := strings.Cut(strings.TrimPrefix(input, "/"), " ")
+	if !ok {
+		return nil
+	}
+	var out []completionOption
+	switch name {
+	case "draft":
+		if strings.Contains(rest, " ") {
+			return nil
+		}
+		for _, in := range m.s.Intentions() {
+			v := "/draft " + in.ID
+			out = append(out, completionOption{complete: v + " ", run: v, label: in.ID, description: in.Label + ", " + audienceShown(in.Audience)})
+		}
+	case "copy":
+		for i := len(m.answers) - 1; i >= 0; i-- {
+			a := m.answers[i]
+			v, label := "/copy "+a.label, a.label
+			if a.draft != "" {
+				label += " · draft: " + a.draft
+			}
+			out = append(out, completionOption{complete: v, run: v, label: label, description: a.preview})
+		}
+	case "model":
+		models := m.s.CompanionModels()
+		if chosen, effort, picked := strings.Cut(rest, " "); picked {
+			if strings.Contains(effort, " ") {
+				return nil
+			}
+			for _, e := range models[chosen] {
+				v := "/model " + chosen + " " + e
+				out = append(out, completionOption{complete: v, run: v, label: e})
+			}
+			return out
+		}
+		names := make([]string, 0, len(models))
+		for n := range models {
+			names = append(names, n)
+		}
+		sort.Strings(names)
+		for _, n := range names {
+			v := "/model " + n
+			o := completionOption{complete: v, run: v, label: n, description: "takes no effort"}
+			if len(models[n]) > 0 {
+				o.complete, o.description = v+" ", "efforts "+strings.Join(models[n], ", ")
+			}
+			out = append(out, o)
+		}
+	case "debug":
+		if strings.Contains(rest, " ") {
+			return nil
+		}
+		for _, o := range debugOptions {
+			if sub, _, more := strings.Cut(o.name, " "); more {
+				out = append(out, completionOption{complete: "/debug " + sub + " ", label: o.name, description: o.description})
+				continue
+			}
+			v := "/debug " + o.name
+			out = append(out, completionOption{complete: v, run: v, label: o.name, description: o.description})
+		}
+	}
+	return out
+}
+
+// preview is the start of an answer's text, its Markdown marks at the
+// start of each line dropped, on one line, for /copy's options.
+func preview(s string) string {
+	var words []string
+	for _, l := range strings.Split(s, "\n") {
+		l = strings.TrimLeft(strings.TrimSpace(l), "#->*` ")
+		if l != "" {
+			words = append(words, l)
+		}
+		if len(words) > 3 {
+			break
+		}
+	}
+	return firstLine(strings.Join(words, " "))
+}
+
 // compact writes a handoff and goes on in a new conversation, as a turn:
 // in a case, begun from the case as it is now, the ledger, the handoff
 // and what the engine carries from the old one (engine.ReloadSummary); in
