@@ -131,7 +131,7 @@ tests:
 
 The schemas are `api/expert/v1alpha3/manifest.schema.json` and `api/expert/v1alpha2/tests.schema.json`.
 
-Parameters are substituted as whole argv elements, never spliced into a string. The engineer's shell, `!<command>` in the chat, is separate.
+Parameters are substituted as whole argv elements, never spliced into a string. The engineer's shell, `!` in the chat, is separate.
 
 ### Guidance in a conversation
 

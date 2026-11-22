@@ -47,6 +47,11 @@ func Run(ctx context.Context, s *engine.Session, o Options, in io.Reader, out io
 		}()
 		return wcancel
 	})
+	// compa in, from the engineer's shell or beside the chat, sends what
+	// it keeps to the chat, which holds the case's store.
+	if m.ingest, m.ingestErr = s.ServeIngest(ctx); m.ingest != nil {
+		defer m.ingest.Close()
+	}
 	p = tea.NewProgram(m, tea.WithContext(ctx), tea.WithInput(in), tea.WithOutput(out))
 	_, err := p.Run()
 	// Quitting cancels what still runs, a turn included, and waits for it:
@@ -105,8 +110,12 @@ type model struct {
 	turn      *turnState
 	quitArmed bool
 	quitting  bool
-	// shells are the engineer's commands running.
-	shells []string
+	// ingest serves the store to compa in, nil where it could not start,
+	// ingestErr saying why; brought is what compa in kept that the next
+	// message names.
+	ingest    *engine.IngestServer
+	ingestErr error
+	brought   []engine.IngestedItem
 
 	current engine.CompanionModel
 	// records are this run's calls; usage is the stored case/chat total.
@@ -397,8 +406,8 @@ func (m *model) update(msg tea.Msg) tea.Cmd {
 		return m.done(msg)
 	case jobDone:
 		return m.jobDone(msg)
-	case shellDone:
-		m.shellDone(msg)
+	case shellDoneMsg:
+		m.shellDone(msg.err)
 		return nil
 	case itemsMsg:
 		m.browserItems(msg)
@@ -432,7 +441,7 @@ func (m *model) key(k tea.KeyPressMsg) tea.Cmd {
 			m.input.CursorEnd()
 		}
 		if submit {
-			m.enter()
+			return m.enter()
 		}
 		return nil
 	}
@@ -455,8 +464,7 @@ func (m *model) key(k tea.KeyPressMsg) tea.Cmd {
 	case "esc":
 		return nil
 	case "enter":
-		m.enter()
-		return nil
+		return m.enter()
 	}
 	var cmd tea.Cmd
 	m.input, cmd = m.input.Update(k)
@@ -465,17 +473,18 @@ func (m *model) key(k tea.KeyPressMsg) tea.Cmd {
 
 // enter sends what the engineer wrote: a command, a shell command or a
 // message. What is refused stays in the input.
-func (m *model) enter() {
+func (m *model) enter() tea.Cmd {
 	line := strings.TrimSpace(m.input.Value())
 	if line == "" {
-		return
+		return nil
 	}
 	var sent bool
+	var cmd tea.Cmd
 	switch {
 	case strings.HasPrefix(line, "/"):
 		sent = m.command(line)
 	case strings.HasPrefix(line, "!"):
-		sent = m.shell(strings.TrimSpace(line[1:]))
+		sent, cmd = m.shell(strings.TrimSpace(line[1:]))
 	default:
 		sent = m.message(line)
 	}
@@ -483,10 +492,12 @@ func (m *model) enter() {
 		m.input.Reset()
 		m.refreshPlaceholder()
 	}
+	return cmd
 }
 
-// message sends the engineer's words to the conversation, the lines they
-// marked in the browser said first.
+// message sends the engineer's words to the conversation, what compa in
+// kept since the last and the lines they marked in the browser said
+// first.
 func (m *model) message(line string) bool {
 	if m.turn != nil {
 		m.print(errorLine("a turn is running: wait for its answer, or ctrl+c to cancel it"))
@@ -495,6 +506,15 @@ func (m *model) message(line string) bool {
 	if len(m.marks) > 0 {
 		line = "the engineer points at " + strings.Join(m.marks, ", ") + "\n\n" + line
 		m.marks = nil
+	}
+	m.takeBrought()
+	if len(m.brought) > 0 {
+		names := make([]string, 0, len(m.brought))
+		for _, it := range m.brought {
+			names = append(names, broughtShown(it))
+		}
+		line = "the engineer kept with compa in " + strings.Join(names, "; ") + "\n\n" + line
+		m.brought = nil
 	}
 	m.print("", youLine(line))
 	s := m.s
@@ -634,6 +654,9 @@ func (m *model) statusLine() string {
 		parts = append(parts, activity)
 	}
 	parts = append(parts, faintW.Render(where))
+	if len(m.brought) > 0 {
+		parts = append(parts, warnW.Render("naming "+text.Plural(len(m.brought), "item")+" kept"))
+	}
 	if len(m.marks) > 0 {
 		parts = append(parts, warnW.Render("pointing at "+strings.Join(m.marks, ", ")))
 	}
@@ -670,8 +693,6 @@ func (m *model) doing() string {
 	switch {
 	case m.turn != nil:
 		return m.turn.status
-	case len(m.shells) > 0:
-		return "running $ " + m.shells[0]
 	}
 	return "waiting for you"
 }

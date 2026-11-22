@@ -1,18 +1,13 @@
 package chat
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
-	"os"
-	"os/exec"
 	"sort"
 	"strings"
-	"time"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/charmbracelet/x/ansi"
 
 	"github.com/lowmagic/compa-engine/engine"
 	"github.com/lowmagic/compa-engine/engine/text"
@@ -85,7 +80,7 @@ func commandHelp() string {
 	for _, c := range commandCatalog {
 		names = append(names, c.label())
 	}
-	return strings.Join(append(names, "!<command>"), ", ")
+	return strings.Join(append(names, "! (your shell)"), ", ")
 }
 
 // command runs a command the engineer gave, reporting whether it was
@@ -491,131 +486,4 @@ func (m *model) printUsage() {
 		m.print(text.Safe(l), noteLine("  "+strings.Join(a.Completeness(), "; ")))
 	}
 	m.print(noteLine("total: " + m.usage.Totals()))
-}
-
-// Bounds on the engineer's commands: the output kept as evidence, cut
-// past it and said so, and the lines printed of it.
-const (
-	maxShellBytes   = 8 << 20
-	shownShellLines = 20
-	// shellWait is how long a command's output may stay open after its
-	// shell ends, as a child left running holds it.
-	shellWait = 2 * time.Second
-)
-
-// shellDone is the engineer's command run: its output, its exit status,
-// and the name it is kept under.
-type shellDone struct {
-	command, output, name string
-	status                int
-	cut                   bool
-	err                   error
-}
-
-// shell runs a command in the engineer's shell beside the chat and keeps
-// its output as evidence.
-func (m *model) shell(command string) bool {
-	if command == "" {
-		m.print(errorLine("! runs a command in your shell, as !journalctl -u kubelet"))
-		return false
-	}
-	m.print(commandLine("$ " + command))
-	m.shells = append(m.shells, command)
-	s := m.s
-	m.spawn(func(ctx context.Context, _ func(tea.Msg)) tea.Msg { return runShell(ctx, s, command) })
-	return true
-}
-
-// runShell runs command with $SHELL -c, or sh -c, and ingests what it
-// printed, as location "$ <command>".
-func runShell(ctx context.Context, s *engine.Session, command string) shellDone {
-	sh := os.Getenv("SHELL")
-	if sh == "" {
-		sh = "sh"
-	}
-	c := exec.CommandContext(ctx, sh, "-c", command)
-	out := &capped{limit: maxShellBytes}
-	c.Stdout, c.Stderr = out, out
-	c.WaitDelay = shellWait
-	err := c.Run()
-	d := shellDone{command: command, output: out.b.String(), cut: out.cut}
-	var exit *exec.ExitError
-	switch {
-	case ctx.Err() != nil:
-		d.err = ctx.Err()
-		return d
-	case errors.As(err, &exit):
-		d.status = exit.ExitCode()
-	case err != nil:
-		d.err = err
-		return d
-	}
-	note := fmt.Sprintf("exit status %d", d.status)
-	if d.cut {
-		note += fmt.Sprintf("; output cut at %d bytes", maxShellBytes)
-	}
-	it, _, err := s.Ingest(strings.NewReader(d.output), "$ "+command, note)
-	if err != nil {
-		d.err = fmt.Errorf("the output was not kept: %w", err)
-		return d
-	}
-	if d.name, err = s.NameEvidence(it.Ref.ID); err != nil {
-		d.err = fmt.Errorf("the output was kept but not named: %w", err)
-	}
-	return d
-}
-
-func (m *model) shellDone(d shellDone) {
-	for i, c := range m.shells {
-		if c == d.command {
-			m.shells = append(m.shells[:i], m.shells[i+1:]...)
-			break
-		}
-	}
-	if errors.Is(d.err, context.Canceled) {
-		m.print(noteLine("$ " + d.command + ": cancelled"))
-		return
-	}
-	lines := strings.Split(strings.TrimRight(d.output, "\n"), "\n")
-	if d.output == "" {
-		lines = nil
-		m.print(noteLine("(no output)"))
-	}
-	for _, l := range lines[:min(len(lines), shownShellLines)] {
-		l = text.Safe(strings.ReplaceAll(l, "\t", "    "))
-		if m.width > 0 {
-			l = ansi.Truncate(l, m.cols(), "…")
-		}
-		m.print(l)
-	}
-	if d.err != nil {
-		m.print(errorLine(d.err.Error()))
-		return
-	}
-	foot := fmt.Sprintf("kept as %s · exit status %d", d.name, d.status)
-	if n := len(lines) - shownShellLines; n > 0 {
-		foot = fmt.Sprintf("%d more lines in %s · ", n, d.name) + foot
-	}
-	if d.cut {
-		foot += fmt.Sprintf(" · output cut at %d bytes", maxShellBytes)
-	}
-	m.print(noteLine(foot))
-}
-
-// capped keeps what is written up to its limit and says whether it cut
-// any.
-type capped struct {
-	b     bytes.Buffer
-	limit int
-	cut   bool
-}
-
-func (c *capped) Write(p []byte) (int, error) {
-	n := len(p)
-	if room := c.limit - c.b.Len(); room < len(p) {
-		c.cut = true
-		p = p[:max(room, 0)]
-	}
-	c.b.Write(p)
-	return n, nil
 }

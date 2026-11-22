@@ -9,7 +9,6 @@ Only the engine collects. A model never reads files, runs commands or reaches da
 Every collection runs through one runner, whatever asked for it:
 
 - a model's tool call, in the main conversation or in a consult: a primitive, an expert test or catalog tool through `run_tool`, or a command through `command`;
-- the engineer's `!<command>`, whose output the engine ingests as evidence when the engineer accepts it;
 - the engine's own ingestion;
 - the engine's runs of the catalogs' capture `identity` tools when the chat opens a case (`Session.ReadInventory`): each once over each attachment whose contents hold its kind's marks, at most as many attachments as the overview lists, with the attachment's directory as `dir`, under the runner's sandbox, allowlist, limits and timeout like any tool, each record stored as evidence; an attachment its source reports unchanged, with the same identity tools installed, keeps the runs made before, read back from the evidence (`docs/EXPERT_API.md` §Catalog packages). They call no model, so they run on a case barred from AI processing as on any other; the inventory made from them is what a model may later be shown, under the barred-accounts rule and redaction like everything else.
 

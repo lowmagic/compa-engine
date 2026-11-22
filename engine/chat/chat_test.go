@@ -175,7 +175,7 @@ func (h *harness) step() {
 		case resumeMsg:
 			h.screen = append(h.screen, "frames waited")
 			h.update(msg)
-		case printedMsg, eventMsg, stateMsg, noteMsg, ledgerCallMsg, ledgerRunningMsg, recordMsg, turnDone, jobDone, shellDone, itemsMsg, historyMsg, usageMsg, verdictMsg, spinner.TickMsg:
+		case printedMsg, eventMsg, stateMsg, noteMsg, ledgerCallMsg, ledgerRunningMsg, recordMsg, turnDone, jobDone, shellDoneMsg, itemsMsg, historyMsg, usageMsg, verdictMsg, spinner.TickMsg:
 			h.update(msg)
 		case tea.RawMsg:
 			// Bubble Tea writes it to the terminal when its loop takes it.
@@ -770,27 +770,79 @@ func TestRefusedWhileRunning(t *testing.T) {
 	h.settle()
 }
 
-// TestShellKeptAsEvidence: !<command> runs in the engineer's shell, its
-// output printed and kept as evidence the browser lists by its command.
-func TestShellKeptAsEvidence(t *testing.T) {
+// TestShellOpensWithCompaIn: ! opens the engineer's shell in the case's
+// folder under a banner saying how to keep what it shows, COMPA_CASE
+// naming the case and COMPA_INGEST the socket the chat serves; text after
+// ! is refused, saying how. Back from the shell, what compa in kept is
+// listed, the status line says the next message names it, and it does.
+func TestShellOpensWithCompaIn(t *testing.T) {
 	t.Setenv("SHELL", "/bin/sh")
 	s := session(t, "case.json")
 	h := start(t, s, Options{NoOpen: true})
-	h.say("!printf 'synthetic one\\nsynthetic two\\n'; exit 3")
-	out := h.out()
-	m := regexp.MustCompile(`kept as (e\d+) · exit status 3`).FindStringSubmatch(out)
-	if m == nil || !strings.Contains(out, "synthetic one\nsynthetic two") {
-		t.Fatalf("the command printed:\n%s", out)
-	}
-	it, err := s.EvidenceNamed(m[1])
+	srv, err := s.ServeIngest(t.Context())
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := string(it.Content); got != "synthetic one\nsynthetic two\n" {
-		t.Errorf("%s holds %q", m[1], got)
+	t.Cleanup(func() { srv.Close() })
+	h.m.ingest = srv
+
+	h.typed("!oc get co")
+	h.press("enter")
+	if got := h.m.input.Value(); got != "!oc get co" || !strings.Contains(h.out(), `! alone opens your shell, where oc get co | compa in "what does this answer?" keeps its output`) {
+		t.Errorf("!oc get co: input %q, printed:\n%s", got, h.out())
 	}
-	if !strings.HasPrefix(it.Location, "$ printf") {
-		t.Errorf("%s is located %q", m[1], it.Location)
+
+	sub := h.m.subshellFor()
+	var term strings.Builder
+	sub.SetStdin(strings.NewReader("echo \"case=$COMPA_CASE\"\npwd\ntest -S \"$COMPA_INGEST\" && echo socket-ok\nexit\n"))
+	sub.SetStdout(&term)
+	sub.SetStderr(&term)
+	if err := sub.Run(); err != nil {
+		t.Fatal(err)
+	}
+	got := ansi.Strip(term.String())
+	root, err := filepath.EvalSymlinks(s.Store().ArtifactRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"━━ compa shell · " + s.CaseID(), `in "what does this answer?" [-t tag,tag]`, "Back to chat:   exit (or ctrl+d)",
+		"case=" + s.CaseID(), root, "socket-ok"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("the shell shows no %q:\n%s", want, got)
+		}
+	}
+
+	item, err := engine.SendIngest(t.Context(), srv.Socket(), strings.NewReader("NAME   READY\nnetwork  False\n"), "stdin", "what does this answer? · tags: openshift")
+	if err != nil {
+		t.Fatal(err)
+	}
+	mark := len(h.printed)
+	h.update(shellDoneMsg{})
+	h.settle()
+	kept := "kept " + item.Name + " (stdin, 2 lines: what does this answer? · tags: openshift)"
+	if out := flat(h.since(mark)); !strings.Contains(out, kept) || !strings.Contains(out, "back from the shell: 1 item kept, which your next message names") {
+		t.Errorf("back from the shell:\n%s", out)
+	}
+	if v := h.view(); !strings.Contains(v, "naming 1 item kept") {
+		t.Errorf("the status line does not say the item is named:\n%s", v)
+	}
+	h.m.input.Reset()
+	h.say("what does it show?")
+	history, err := s.ConversationHistory(t.Context())
+	if err != nil || len(history) == 0 {
+		t.Fatal(history, err)
+	}
+	sent := ""
+	for _, msg := range history {
+		if msg.Kind == engine.MessageEngineer {
+			sent = msg.Text
+		}
+	}
+	if !strings.HasPrefix(sent, "the engineer kept with compa in "+item.Name+" (stdin, 2 lines: ") || !strings.HasSuffix(sent, "what does it show?") {
+		t.Errorf("the message sent: %q", sent)
+	}
+	if strings.Contains(h.view(), "naming 1 item") {
+		t.Error("the status line still names the item after the message")
 	}
 }
 

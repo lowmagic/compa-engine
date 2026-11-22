@@ -71,7 +71,7 @@ A support engineer opens a case, or a troubleshooting chat with no case.
 
 ### 6. The engineer's shell
 
-- Run a command in the engineer's own shell from the chat (`!<command>`) and offer its output as evidence; explicit ingestion of pasted text, files and piped output (`compa in`). Do not auto-retain every stdout or stderr stream.
+- Open the engineer's own shell from the chat (`!`), in the case's folder, under a banner saying how to keep what a command shows and how to come back; explicit ingestion of pasted text, files and piped output (`compa in`, with the engineer's question and tags kept as the note), reaching the chat that holds the case, which names what was kept in the engineer's next message. Do not auto-retain every stdout or stderr stream.
 - A persistent embedded shell is later work (`docs/ROADMAP.md`); it must work inside tmux without nesting tmux.
 
 ### 7. Usage

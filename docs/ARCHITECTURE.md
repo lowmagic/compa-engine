@@ -19,7 +19,7 @@
 ## System boundaries
 
 ```text
-CaseSource / ArtifactSource (passed by the deployment) / engineer shell (!<command>, compa in)
+CaseSource / ArtifactSource (passed by the deployment) / engineer shell (!, compa in)
                      |
              Acquisition (Go)
                      |
@@ -165,7 +165,7 @@ Commands, ten:
 - `/model [model] [effort]` — show or switch the model and effort.
 - `/compact` — write a handoff and continue in a new linked conversation: in a case, begun from the case's state, the ledger, the handoff and what is carried from the old one, the summary reload (`docs/MODEL_API.md` §The conversation, Reopening); in a chat, from the handoff (`docs/MODEL_API.md` §The conversation, Compaction).
 - `/debug [on|off|usage|experts|load <expert>|ranked]` — `on`: every call's input size, cache share and timing inline from then on, and each tool call's question and answers whole, an answer's flags beside it; `off`: the quiet chat again; `usage`: tokens and cost by conversation, consult and model; `experts`: the installed experts, with those loaded; `load <expert>`: load an expert's guidance into the conversation; `ranked`: the evidence the conversation used, ranked by what was done with each and how recently, with its lines and why, no model call; with none, whether it is on and the arguments.
-- `!<command>` — run a command in the engineer's shell and offer its output as evidence (§Shell lifecycle).
+- `!` — open the engineer's shell in the case's folder, the chat giving it the terminal until it ends (§Shell lifecycle).
 
 `compa chat [--dir <path>] [<chat>]` is the same chat with no case, and no opening turn: the directory, when given, is the artifact root, and its store lives under `~/.local/share/compa/chats/<chat>/`, a new chat named `chat-<UTC time>` and an earlier one resumed by its name, a name that could not name a case refused. The directory is kept with the chat by its real path: resumed without one, the chat is over it again, and resumed with another, or with one where it began with none, it is refused (`engine.TestChatKeepsItsDirectory`). A chat with no directory holds no case's data, so its calls go out under a barred-accounts list; a chat over a directory belongs to an account that cannot be checked, so where the deployment names a list, its every model call is refused, with no override, and the engineer opens the case instead (`engine.TestChatOverADirectoryUnderAList`). `compa ask <case> "<question>"` prepares the case as the chat's opening does, the ledger waited for as before an opening, runs one turn in the case's conversation, and prints the answer as Markdown. `compa case …` commands call no model. Neither `compa <case>` nor `compa chat` runs without a terminal for its input and output: each refuses, saying `compa ask` runs one turn without one.
 
@@ -184,7 +184,7 @@ The one place to navigate what the case holds, over the chat rather than beside 
 
 ## Shell lifecycle
 
-The engineer runs a command in their own shell from the chat with `!<command>`, and its output is offered as evidence; `compa in` ingests a command's output from any shell. Shell state is mutable and separate from the case store; ingestion promotes output to immutable evidence. Ingestion-time node associations must be unambiguous. An embedded PTY, independent of any terminal multiplexer, is later work. The engineer's shell is unrelated to the model's tools and grants a model nothing.
+`!` in the chat opens the engineer's own shell (`$SHELL`) in the case's artifact folder, under a three-line banner naming the case and the folder, saying how to keep what a command shows (`<command> | compa in "what does this answer?" [-t tag,tag]`) and how to come back (`exit`); the chat gives it the terminal until it ends. Nothing the shell runs is kept unless piped to `compa in`; text after `!` is refused, saying so. `compa in` ingests piped output or files from any shell: outside a compa shell as `compa in <case> [--note text] [file …]`, and inside one, where `COMPA_CASE` names the case, as `compa in ["question"] [-t tags] [-f file …]`, the question and tags kept as the item's note. While a chat holds a case its store's lock refuses another process, so the chat serves the store over a Unix socket in a directory of its own, both owner-only, named to the shell by `COMPA_INGEST` and to any other shell by a file in the store's directory while it serves; `compa in` sends what it reads there, and the chat keeps it and names it. Back from the shell, and before the engineer's next message, the chat lists what was kept, and that message begins by naming it — `the engineer kept with compa in e14 (stdin, 2 lines: what does this answer? · tags: openshift)` — the status line saying so until it is sent. Shell state is mutable and separate from the case store; ingestion promotes output to immutable evidence. Ingestion-time node associations must be unambiguous. An embedded PTY, independent of any terminal multiplexer, is later work. The engineer's shell is unrelated to the model's tools and grants a model nothing.
 
 ## Failure and recovery
 

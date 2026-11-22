@@ -335,3 +335,21 @@ Delivers: User interface.
 
 Done when: `make check` passes; `chat.TestArgumentPopovers` verifies each command's options, tab and enter, and that
 no row enters the transcript; `chat.TestCompletionExactArgumentRuns` verifies an argument typed whole runs as typed.
+
+## 22. The engineer's shell and compa in beside the chat
+
+Status: done
+
+`!` opens the engineer's shell in the case's folder under a three-line banner, with `COMPA_CASE` and `COMPA_INGEST` set;
+`!<command>` is refused, saying how. While the chat holds the case it serves the store to `compa in` over an
+owner-only Unix socket, named to the shell and in the store's directory, so `compa in` reaches it from the shell or any
+other. In a compa shell `compa in ["question"] [-t tags] [-f file …]` takes the case from `COMPA_CASE`, the question
+and tags kept as the note; outside one, `compa in <case> …` is unchanged. Back from the shell the chat lists what was
+kept, and the next message names it.
+
+Delivers: The engineer's shell.
+
+Done when: `make check` passes; `engine.TestIngestServer` verifies the socket's modes, the store's pointer, ingesting
+and closing; `cli.TestParseIn` and `TestIngestIntoAHeldCase` verify both forms of `compa in` and reaching a held
+case; `chat.TestShellOpensWithCompaIn` verifies the banner, the environment, the refusal, the list and the next
+message.

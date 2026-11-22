@@ -5,10 +5,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"flag"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -593,34 +595,129 @@ func (l *commandLine) evidenceShow(ctx context.Context, id, evID string, maxByte
 	return nil
 }
 
-func (l *commandLine) ingest(ctx context.Context, id string, files []string, note string, in io.Reader, out io.Writer) error {
+// inRequest is what compa in was asked: the case, the files, standard
+// input where none, the note kept with each, and the socket of the chat
+// holding the case, where the engineer's shell named it.
+type inRequest struct {
+	id     string
+	files  []string
+	note   string
+	socket string
+}
+
+// inUsage is compa in's two forms: outside a compa shell, and inside one,
+// where the case is the shell's.
+const inUsage = `in <case> [--note text] [file …], or in a compa shell: in ["what does this answer?"] [-t tag,tag] [-f file …]`
+
+// parseIn reads compa in's arguments. Given -c, or in a compa shell
+// (COMPA_CASE) unless the case is named first as outside one, the one
+// argument is the engineer's question, kept as the note, and files are
+// given with -f; outside, the case comes first and the files after it.
+// -t's tags are kept in the note. The shell's socket (COMPA_INGEST) is
+// used for the shell's case.
+func parseIn(args []string, shellCase, shellSocket string) (inRequest, error) {
+	fl := flag.NewFlagSet("in", flag.ContinueOnError)
+	fl.SetOutput(io.Discard)
+	note := fl.String("note", "", "")
+	kase := fl.String("c", "", "")
+	tags := fl.String("t", "", "")
+	var files []string
+	fl.Func("f", "", func(v string) error { files = append(files, v); return nil })
+	pos, err := parseInterleaved(fl, args)
+	if err != nil {
+		return inRequest{}, fmt.Errorf("%w: %s", errUsage, inUsage)
+	}
+	r := inRequest{id: *kase, note: *note}
+	question := ""
+	switch {
+	case r.id == "" && shellCase != "" && (len(pos) == 0 || pos[0] != shellCase), r.id != "":
+		if r.id == "" {
+			r.id = shellCase
+		}
+		if len(pos) > 1 {
+			return inRequest{}, fmt.Errorf("%w: give the question as one argument, and files with -f: %s", errUsage, inUsage)
+		}
+		if len(pos) == 1 {
+			question = pos[0]
+		}
+		r.files = files
+	default:
+		if len(pos) < 1 {
+			return inRequest{}, fmt.Errorf("%w: %s", errUsage, inUsage)
+		}
+		r.id, r.files = pos[0], slices.Concat(pos[1:], files)
+	}
+	if question != "" {
+		r.note = strings.TrimSpace(question + " · " + r.note)
+		r.note = strings.TrimSuffix(r.note, " ·")
+	}
+	var named []string
+	for _, t := range strings.Split(*tags, ",") {
+		if t = strings.TrimSpace(t); t != "" {
+			named = append(named, t)
+		}
+	}
+	if len(named) > 0 {
+		r.note = strings.TrimPrefix(r.note+" · tags: "+strings.Join(named, ", "), " · ")
+	}
+	if shellSocket != "" && r.id == shellCase {
+		r.socket = shellSocket
+	}
+	return r, nil
+}
+
+// ingest keeps each of r's files, or standard input, as the engineer's
+// evidence: in the case's store, or, where a chat holds it, sent to the
+// chat to keep, through the socket its shell named or the store names.
+func (l *commandLine) ingest(ctx context.Context, r inRequest, in io.Reader, out io.Writer) error {
+	files := r.files
 	if len(files) == 0 {
 		if f, ok := in.(*os.File); ok && isTerminal(f) {
 			return fmt.Errorf("%w: give files, or pipe what to ingest into compa", errUsage)
 		}
 		files = []string{"-"}
 	}
-	s, err := l.e.OpenCaseStore(ctx, id)
-	if err != nil {
-		return err
+	put := func(rd io.Reader, location string) (engine.IngestedItem, error) {
+		return engine.SendIngest(ctx, r.socket, rd, location, r.note)
 	}
-	defer s.Close()
+	if r.socket == "" {
+		s, err := l.e.OpenCaseStore(ctx, r.id)
+		switch {
+		case errors.Is(err, engine.ErrCaseHeld):
+			socket, serr := l.e.IngestSocket(ctx, r.id)
+			if serr != nil || socket == "" {
+				return err
+			}
+			r.socket = socket
+		case err != nil:
+			return err
+		default:
+			defer s.Close()
+			put = func(rd io.Reader, location string) (engine.IngestedItem, error) {
+				it, isNew, err := s.Ingest(rd, location, r.note)
+				return engine.IngestedItem{ID: it.Ref.ID, Location: it.Location, Bytes: it.Size.Bytes, Lines: it.Size.Lines, New: isNew}, err
+			}
+		}
+	}
 	var failed int
 	for _, name := range files {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		it, isNew, err := ingestOne(s, name, in, note)
+		it, err := ingestOne(put, name, in)
 		if err != nil {
 			fmt.Fprintf(out, "%s: %v\n", text.Safe(name), err)
 			failed++
 			continue
 		}
 		state := "already stored"
-		if isNew {
+		if it.New {
 			state = "new"
 		}
-		fmt.Fprintf(out, "%s  %s  %d bytes, %s (%s)\n", it.Ref.ID, text.Safe(it.Location), it.Size.Bytes, text.Plural(int(it.Size.Lines), "line"), state)
+		fmt.Fprintf(out, "%s  %s  %d bytes, %s (%s)\n", it.ID, text.Safe(it.Location), it.Bytes, text.Plural(int(it.Lines), "line"), state)
+		if it.Name != "" {
+			fmt.Fprintf(out, "kept as %s by the chat holding the case; your next message there names it\n", text.Safe(it.Name))
+		}
 	}
 	if failed > 0 {
 		return fmt.Errorf("%d of %d inputs were not ingested", failed, len(files))
@@ -630,23 +727,23 @@ func (l *commandLine) ingest(ctx context.Context, id string, files []string, not
 
 // ingestOne ingests a file, or standard input for "-", recording a file
 // by its absolute path.
-func ingestOne(s *engine.CaseStore, name string, in io.Reader, note string) (engine.EvidenceItem, bool, error) {
+func ingestOne(put func(io.Reader, string) (engine.IngestedItem, error), name string, in io.Reader) (engine.IngestedItem, error) {
 	if name == "-" {
-		return s.Ingest(in, "stdin", note)
+		return put(in, "stdin")
 	}
 	abs, err := filepath.Abs(name)
 	if err != nil {
-		return engine.EvidenceItem{}, false, err
+		return engine.IngestedItem{}, err
 	}
 	f, err := os.Open(abs)
 	if err != nil {
-		return engine.EvidenceItem{}, false, err
+		return engine.IngestedItem{}, err
 	}
 	defer f.Close()
 	if info, err := f.Stat(); err == nil && info.IsDir() {
-		return engine.EvidenceItem{}, false, fmt.Errorf("%s is a directory", abs)
+		return engine.IngestedItem{}, fmt.Errorf("%s is a directory", abs)
 	}
-	return s.Ingest(f, abs, note)
+	return put(f, abs)
 }
 
 // writeBounded writes at most limit bytes of content, saying how much it

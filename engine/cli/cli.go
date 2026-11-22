@@ -136,14 +136,11 @@ func (l *commandLine) run(ctx context.Context, args []string, in io.Reader, out 
 		return err
 	}
 	if len(args) >= 1 && args[0] == "in" {
-		fl := flag.NewFlagSet("in", flag.ContinueOnError)
-		fl.SetOutput(io.Discard)
-		note := fl.String("note", "", "")
-		pos, err := parseInterleaved(fl, args[1:])
-		if err != nil || len(pos) < 1 {
-			return fmt.Errorf("%w: in <case> [--note text] [file …]", errUsage)
+		r, err := parseIn(args[1:], os.Getenv("COMPA_CASE"), os.Getenv("COMPA_INGEST"))
+		if err != nil {
+			return err
 		}
-		return l.ingest(ctx, pos[0], pos[1:], *note, in, out)
+		return l.ingest(ctx, r, in, out)
 	}
 	if len(args) >= 1 && args[0] == "chat" {
 		fl := flag.NewFlagSet("chat", flag.ContinueOnError)
