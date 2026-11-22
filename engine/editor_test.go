@@ -341,7 +341,9 @@ func TestEditorFailsOpen(t *testing.T) {
 }
 
 // TestEditorDraftKeepsCorrection: [E2] a draft is kept as the engineer is
-// shown it, corrected, and the model's draft stays stored as written.
+// shown it — corrected, with [eN] citations stripped outside fenced blocks
+// and inline code — while the turn's reply and the stored messages retain
+// [eN:lines] citations for checking, ranking and review.
 func TestEditorDraftKeepsCorrection(t *testing.T) {
 	s, _ := editorSession(t, answers(certainAnswer, ""), func(context.Context, model.Request) (*modelfixture.Answer, error) {
 		return finding([]any{"s2"}, certainCorrected, certainFinding), nil
@@ -351,15 +353,85 @@ func TestEditorDraftKeepsCorrection(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if it.Text != certainCorrected || len(chk.Check.Corrected) != 1 {
-		t.Errorf("the draft kept %q, %+v", it.Text, chk)
+	stripped := StripDraftCites(certainCorrected)
+	if chk.Text != certainCorrected || it.Text != stripped || strings.Contains(it.Text, "[e1:2]") || len(chk.Check.Corrected) != 1 {
+		t.Errorf("the draft kept %q, reply %q, %+v", it.Text, chk.Text, chk)
 	}
 	items, err := s.Items(context.Background())
-	if err != nil || len(items) != 1 || items[0].Text != certainCorrected {
+	if err != nil || len(items) != 1 || items[0].Text != stripped {
 		t.Errorf("the items %+v, %v", items, err)
 	}
 	if msgs := mainMessages(t, s); !slices.ContainsFunc(msgs, func(m companion.Message) bool { return m.Kind == companion.KindModel && m.Text == certainAnswer }) {
 		t.Error("the model's draft is not stored as written")
+	}
+}
+
+func TestStripDraftCitesAndCustomIntention(t *testing.T) {
+	raw := strings.Join([]string{
+		"Observed in `/var/log/messages` (`[e1:2]` is literal code) on worker-1 [e1:2]:",
+		"",
+		"- Sync timed out ([e1:2], [e4:8]).",
+		"- Next read [e1:2, 5–7] and [link](https://example.com) or [e1](https://example.com).",
+		"  ```",
+		"  Oct 29 11:27 worker-1 ovnkube[12]: [e1:2] sync error",
+		"  ```",
+	}, "\n")
+	want := strings.Join([]string{
+		"Observed in `/var/log/messages` (`[e1:2]` is literal code) on worker-1:",
+		"",
+		"- Sync timed out.",
+		"- Next read and [link](https://example.com) or [e1](https://example.com).",
+		"  ```",
+		"  Oct 29 11:27 worker-1 ovnkube[12]: [e1:2] sync error",
+		"  ```",
+	}, "\n")
+	if got := StripDraftCites(raw); got != want {
+		t.Errorf("StripDraftCites (-want +got):\n%s", cmp.Diff(want, got))
+	}
+
+	citedDraft := "Observed in `details.txt` on worker-1 [e1:2]:\n\n```\nPods on two workers time out resolving service names.\n```"
+	s, f := reviewerSession(t, answers(citedDraft, ""), func(context.Context, model.Request) (*modelfixture.Answer, error) {
+		return finding([]any{"s1"}, ""), nil
+	})
+	home := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, "none"))
+	baseEng, err := New(Options{Cases: StubCases("../testdata/cases"), Artifacts: LocalDir(home), Home: home})
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.e.config.Comments = baseEng.config.Comments
+	ctx := context.Background()
+	it, reply, err := s.Draft(ctx, "internal focus on worker-1 DNS timeouts", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(reply.Text, "[e1:2]") || strings.Contains(it.Text, "[e1:2]") || !strings.Contains(it.Text, "```\nPods on two workers") {
+		t.Errorf("draft reply %q, item %q", reply.Text, it.Text)
+	}
+	_, main := reviewerCalls(f)
+	internalAsk := main[len(main)-1].Messages[len(main[len(main)-1].Messages)-1].Text
+	if !strings.Contains(internalAsk, "Draft Internal note (internal)") ||
+		!strings.Contains(internalAsk, "Engineer's instructions for this draft: focus on worker-1 DNS timeouts") ||
+		strings.Contains(internalAsk, "smoking gun") {
+		t.Errorf("internal draft request:\n%s", internalAsk)
+	}
+	if _, _, err := s.Draft(ctx, "update ask for ovnkube logs", nil); err != nil {
+		t.Fatal(err)
+	}
+	_, main = reviewerCalls(f)
+	updateAsk := main[len(main)-1].Messages[len(main[len(main)-1].Messages)-1].Text
+	if !strings.Contains(updateAsk, "Draft Customer update (update)") ||
+		!strings.Contains(updateAsk, "Engineer's instructions for this draft: ask for ovnkube logs") ||
+		!strings.Contains(updateAsk, "Never state a cause as found in your own voice") {
+		t.Errorf("customer update draft request:\n%s", updateAsk)
+	}
+	rA1, err := s.Review(ctx, ReviewAsk{Item: "a1"}, nil)
+	if err != nil || rA1.Of != "a1" {
+		t.Fatalf("/review a1 on draft: %+v, %v", rA1, err)
+	}
+	reviewer, _ := reviewerCalls(f)
+	if req := reviewer[len(reviewer)-1].Messages[0].Text; !strings.Contains(req, "the draft a1 for internal") || !strings.Contains(req, "[e1:2]") || !strings.Contains(req, "### e1") {
+		t.Errorf("/review a1 did not quote cited evidence from stored draft:\n%s", req)
 	}
 }
 

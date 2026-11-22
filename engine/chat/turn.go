@@ -79,7 +79,11 @@ type turnState struct {
 // when either has changed.
 func (t *turnState) rendered(width int) string {
 	if t.live.Len() != t.shownLen || width != t.shownAt {
-		t.shown = markdown(text.Safe(t.live.String()), width, nil)
+		raw := t.live.String()
+		if t.kind == kindDraft {
+			raw = engine.StripDraftCites(raw)
+		}
+		t.shown = markdown(text.Safe(raw), width, nil)
 		t.shownLen, t.shownAt = t.live.Len(), width
 	}
 	return t.shown
@@ -136,10 +140,12 @@ type (
 		kind  turnKind
 		reply engine.TalkReply
 		// text is what the turn ends with to print: an answer, a draft or
-		// a handoff; item a draft's item; loaded the expert loaded.
-		text   string
-		item   engine.CompanionItem
-		loaded string
+		// a handoff; item a draft's item; draftIntention a restored draft's
+		// intention; loaded the expert loaded.
+		text           string
+		item           engine.CompanionItem
+		draftIntention string
+		loaded         string
 		// ledger is the case ledger as /ledger shows it.
 		ledger string
 		// reopen is a reopened case's state, offer what reloading it
@@ -960,8 +966,15 @@ func (m *model) printAnswer(d turnDone, model engine.CompanionModel) {
 		m.refreshPlaceholder()
 	}
 	// A blank row between the turn's tool lines, or the engineer's words,
-	// and the answer.
-	m.print("", markdown(text.Safe(strings.TrimSpace(d.text)), m.cols(), marksOf(d.cites, d.checks)))
+	// and the answer. Drafts strip [eN] citations for display after checks run.
+	shownText := strings.TrimSpace(d.text)
+	var marks citeMarks
+	if d.kind == kindDraft {
+		shownText = strings.TrimSpace(engine.StripDraftCites(d.text))
+	} else {
+		marks = marksOf(d.cites, d.checks)
+	}
+	m.print("", markdown(text.Safe(shownText), m.cols(), marks))
 	if d.checkErr != nil {
 		m.print(warnLine("the citations could not be checked: " + d.checkErr.Error()))
 	}
@@ -1009,10 +1022,13 @@ func (m *model) printAnswer(d turnDone, model engine.CompanionModel) {
 	}
 	switch d.kind {
 	case kindDraft:
-		if d.item.Seq != 0 {
+		switch {
+		case d.item.Seq != 0:
 			foot = append(foot, "the draft "+d.item.Intention+" kept as "+d.item.Name()+"; /copy "+d.item.Name()+" copies it")
-		} else {
+		case errors.Is(d.err, context.Canceled):
 			foot = append(foot, "the draft was not kept: its turn was cancelled")
+		case d.draftIntention != "":
+			foot = append(foot, "draft: "+d.draftIntention)
 		}
 	case kindCompact:
 		foot = append(foot, "a handoff: the conversation goes on in a new one, begun from it and the pinned items")

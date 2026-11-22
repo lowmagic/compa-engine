@@ -29,7 +29,7 @@ type commandSpec struct {
 var commandCatalog = []commandSpec{
 	{name: "analyze", description: "Report the observations and open questions", waitsForTurn: true},
 	{name: "draft", args: "[intention]", description: "List intentions or write a draft", waitsForTurn: true, idleWithoutArgs: true},
-	{name: "review", args: "[--ranked] [item]", description: "Have the reviewer review the last answer, or an item; --ranked adds evidence used, not cited", waitsForTurn: true},
+	{name: "review", args: "[--ranked] [aN]", description: "Have the reviewer review the last answer, or an answer/draft; --ranked adds evidence used, not cited", waitsForTurn: true},
 	{name: "check", args: "[aN]", description: "Open the checks tab at the last answer's findings, or an answer's", waitsForTurn: true},
 	{name: "load", args: "<expert>", description: "Load an expert into the conversation", waitsForTurn: true},
 	{name: "experts", description: "List installed experts"},

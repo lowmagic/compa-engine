@@ -21,10 +21,12 @@ type historyEntry struct {
 	conv    string
 	// check is what the editor made of the answer, and verdicts the
 	// engineer's on its span flags; shown says the entry is an answer as
-	// it was printed.
-	check    engine.AnswerCheck
-	verdicts []engine.SpanVerdict
-	shown    bool
+	// it was printed, and draft says it is a comment draft.
+	check          engine.AnswerCheck
+	verdicts       []engine.SpanVerdict
+	shown          bool
+	draft          bool
+	draftIntention string
 }
 
 type historyMsg struct {
@@ -85,6 +87,8 @@ func (m *model) readHistory(ctx context.Context, send func(tea.Msg)) error {
 		}
 		if shown {
 			e.message.Text = v.Text
+			e.draft = v.Draft
+			e.draftIntention = v.DraftIntention
 			if c := messages[v.Original].Check; c != nil {
 				e.check = *c
 			}
@@ -170,7 +174,11 @@ func (m *model) restoreHistory(h historyMsg) {
 			}
 			switch {
 			case entry.shownAnswer():
-				m.printAnswer(turnDone{text: message.Text, cites: entry.cites, checks: entry.checks,
+				kind := kindAnswer
+				if entry.draft {
+					kind = kindDraft
+				}
+				m.printAnswer(turnDone{kind: kind, draftIntention: entry.draftIntention, text: message.Text, cites: entry.cites, checks: entry.checks,
 					checkErr: h.checkErr, flags: entry.flags, flagErr: h.flagErr, verdicts: entry.verdicts, usage: entry.usage, check: entry.check}, entry.model)
 			case len(message.Calls) > 0 && strings.TrimSpace(message.Text) != "":
 				m.print(markdown(text.Safe(message.Text), m.cols(), marksOf(entry.cites, entry.checks)))

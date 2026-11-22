@@ -36,12 +36,12 @@ func reviewedSession(t *testing.T) (*engine.Session, string) {
 	return s, reviewer
 }
 
-// draftReview is the review of the draft i1 as printed.
+// draftReview is the review of the draft a2 as printed.
 var draftReview = []string{
 	`⚠ s1 certainty · "the investigation confirms the OVN controller on worker-1 cannot sync" · e1:2 shows one sync error on worker-1, not a cause (e1:2)`,
 	"alternative: a transient API outage during the sync · discriminator: the controller's log after the error, not given",
 	"at most: the OVN controller on worker-1 reported a sync error",
-	"review of i1 · 1 statement: 0 supported, 1 finding, 0 skipped · ",
+	"review of a2 · 1 statement: 0 supported, 1 finding, 0 skipped · ",
 }
 
 // unwrapped is s with every space gone, so a check of a long path holds
@@ -67,8 +67,8 @@ func TestLeadingRTypesNormallyAfterDraft(t *testing.T) {
 	}
 }
 
-// TestReviewCommand: [E3] /review reviews the last answer and /review i1
-// the draft kept, each printed beneath with its findings and footer,
+// TestReviewCommand: [E3] /review reviews the last answer and /review a2
+// the draft, each printed beneath with its findings and footer,
 // neither an answer: the next answer is a3, after a1 and the draft. The
 // turns tab lists each review by what it is of, and a reopened chat
 // prints them the same, in place.
@@ -83,7 +83,7 @@ func TestReviewCommand(t *testing.T) {
 	}
 	h.settle()
 	h.say("/draft customer-update")
-	h.say("/review i1")
+	h.say("/review a2")
 	h.say("anchor please")
 	answerReview := []string{
 		`⚠ s1 overstated · "logs nothing new" · e1:2 is one line of the log, not the whole of it (e1:2)`,
@@ -111,16 +111,16 @@ func TestReviewCommand(t *testing.T) {
 		}
 	}
 	v := reopened.turnsTab()
-	if a1, r1, ri := strings.Index(v, "  a1 · "), strings.Index(v, "  review of a1 · "), strings.Index(v, "  review of i1 · "); a1 < 0 || r1 < a1 || ri < r1 {
+	if a1, r1, ra2 := strings.Index(v, "  a1 · "), strings.Index(v, "  review of a1 · "), strings.Index(v, "  review of a2 · "); a1 < 0 || r1 < a1 || ra2 < r1 {
 		t.Errorf("the turns tab:\n%s", v)
 	}
 }
 
 // TestReviewRanked: /review --ranked reviews the last answer and /review
-// --ranked i1 the draft, each given the evidence used most and not cited,
+// --ranked a2 the draft, each given the evidence used most and not cited,
 // the status bar saying so, the scripted reviewer answering a request
 // that carries it; /review alone does not carry it, and arguments other
-// than --ranked and one item are refused with the command's form.
+// than --ranked and one target are refused with the command's form.
 func TestReviewRanked(t *testing.T) {
 	s, _ := reviewedSession(t)
 	h := start(t, s, Options{NoOpen: true})
@@ -140,19 +140,19 @@ func TestReviewRanked(t *testing.T) {
 		t.Errorf("/review after /review --ranked printed:\n%s", out)
 	}
 	h.say("/draft customer-update")
-	h.typed("/review i1 --ranked")
+	h.typed("/review a2 --ranked")
 	h.press("enter")
-	if h.m.turn == nil || h.m.turn.status != "the reviewer is reviewing i1, given the evidence used most and not cited" {
-		t.Fatal("/review i1 --ranked began no review given the ranked evidence")
+	if h.m.turn == nil || h.m.turn.status != "the reviewer is reviewing a2, given the evidence used most and not cited" {
+		t.Fatal("/review a2 --ranked began no review given the ranked evidence")
 	}
 	h.settle()
-	if out := flat(h.out()); !strings.Contains(out, "review of i1 · 1 statement: 0 supported, 1 finding, 0 skipped · ") || strings.Count(out, ranked) != 2 {
-		t.Errorf("/review i1 --ranked printed:\n%s", out)
+	if out := flat(h.out()); !strings.Contains(out, "review of a2 · 1 statement: 0 supported, 1 finding, 0 skipped · ") || strings.Count(out, ranked) != 2 {
+		t.Errorf("/review a2 --ranked printed:\n%s", out)
 	}
 	was := calls(t, s)
-	for _, bad := range []string{"/review --rank", "/review i1 i2"} {
+	for _, bad := range []string{"/review --rank", "/review a1 a2"} {
 		h.say(bad)
-		if out := h.out(); !strings.Contains(out, "✗ /review takes [--ranked] [item]") || h.m.turn != nil {
+		if out := h.out(); !strings.Contains(out, "✗ /review takes [--ranked] [aN]") || h.m.turn != nil {
 			t.Errorf("%s was not refused:\n%s", bad, out)
 		}
 	}

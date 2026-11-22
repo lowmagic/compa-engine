@@ -75,6 +75,10 @@ type AnswerView struct {
 	// Corrected says the text shown is the editor's correction, not the
 	// model's own words.
 	Corrected bool
+	// Draft says the answer is a comment draft answering draftWords, and
+	// DraftIntention is its intention ID (internal, update, kcs, …).
+	Draft          bool
+	DraftIntention string
 }
 
 // AnswerViews are history's answers as the engineer was shown them, in
@@ -103,9 +107,37 @@ func AnswerViews(history []ConversationMessage) []AnswerView {
 			v.Text, v.At, v.Corrected = m.Text, i, false
 			continue
 		}
-		out = append(out, AnswerView{Label: "a" + strconv.Itoa(len(out)+1), Text: m.Text, At: i, Original: i})
+		var draft bool
+		var intention string
+		for j := i - 1; j >= 0; j-- {
+			if prev := history[j]; prev.Kind == MessageEngineer || prev.Kind == MessageEngine {
+				if prev.Kind == MessageEngine {
+					intention, draft = draftIntentionOf(prev.Text)
+				}
+				break
+			}
+		}
+		out = append(out, AnswerView{
+			Label: "a" + strconv.Itoa(len(out)+1), Text: m.Text, At: i, Original: i,
+			Draft: draft, DraftIntention: intention,
+		})
 	}
 	return out
+}
+
+func draftIntentionOf(text string) (string, bool) {
+	rest, ok := strings.CutPrefix(text, draftLead)
+	if !ok {
+		return "", false
+	}
+	head, _, ok := strings.Cut(rest, "), for ")
+	if !ok {
+		return "", true
+	}
+	if at := strings.LastIndexByte(head, '('); at >= 0 {
+		return head[at+1:], true
+	}
+	return "", true
 }
 
 // Replacement is the text a message puts in place of the answer before

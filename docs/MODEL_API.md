@@ -491,7 +491,7 @@ without it.
   into the first call's corrected text, or into the answer as written, statement by statement — dropped, with why,
   its findings shown flagged, where the statements do not pair or it changed any other — and its anchors go to the one
   revision with the first's. A follow-up that fails, is refused or passes the bound leaves the first call's result,
-  said beneath the answer. What is printed, and what a draft keeps, is the answer as corrected or revised; the footer
+  said beneath the answer. What is printed, and what a draft keeps, is the answer as corrected or revised (for a comment draft, `[eN]` and `[lN]` citation tags outside fenced code blocks and inline code spans are stripped from the displayed and kept comment text after `CheckCites`, `AnswerFlags` and the editor finish, while the stored conversation message retains the exact `[eN:lines]` citations for `/review` and ranked evidence); the footer
   says how many statements the check accounted for where it did not account for all, `checked 11 of 22 statements`,
   read from the check as kept, and counts the statements the correction changed and the citations it corrected,
   `corrected by the editor: 2 statements, 3 citations`, and the original stays in the browser's turns tab. A
@@ -504,12 +504,12 @@ without it.
   its own, and its calls pass the gate, redaction and barred-accounts rule and count in the case's usage. A deployment
   with no `editor` profile runs no editor.
 - **The reviewer.** A second opinion on request, from the model the `reviewer` profile names (conversation kind
-  `review`, task `answers.review`, profile class `reviewer`): `/review` reviews the last answer as shown and `/review iN`
-  an item (`chat.TestReviewCommand`, `chat.TestLeadingRTypesNormallyAfterDraft`). Nothing is called until the engineer asks. It is given the text under review, its
+  `review`, task `answers.review`, profile class `reviewer`): `/review` reviews the last answer or draft as shown and `/review aN`
+  an answer or draft by label (`iN` item names also resolve to the cited draft message) (`chat.TestReviewCommand`, `chat.TestLeadingRTypesNormallyAfterDraft`). Nothing is called until the engineer asks. It is given the text under review, its
   statements and the items cited, quoted as the editor's are (§Quoted lines), never the conversation; its prompt
   includes `customer.md`'s four questions, and each finding gives the claim, why, its lines, the strongest material
   alternative, the missing discriminator and the most the lines would support; it corrects nothing, and a claim held
-  by lines other than those cited is its `citation_mismatch`. `/review --ranked [iN]`, an experiment and never the
+  by lines other than those cited is its `citation_mismatch`. `/review --ranked [aN]`, an experiment and never the
   default, also gives it, after the items cited, the top of the conversation's ranked evidence that the text does not
   cite, of the items disclosed to the companion, bounded as a suggested reload bounds what it carries, each item
   headed as disclosed to the companion and not cited by the text; the items cited are quoted within what the request

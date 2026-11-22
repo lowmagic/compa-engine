@@ -156,7 +156,7 @@ Keys: enter sends; `ctrl+o` prints the last turn's tool calls and results in ful
 Commands:
 
 - `/analyze` — an observations report: what is observed, with its evidence; what is attributed, and to whom; the open questions and causal leads, each with the data that would settle or test it; the data to gather; what is not yet read.
-- `/draft [intention]` — a comment for an intention from the configuration (`comments.intentions`, the engine's base set unless the deployment replaces it, in the house style, `comments.style`): an internal observations comment, an internal note, a request for data or a status update in the base set; kept as an item; the intentions are listed when none is given. Never posted by the engine.
+- `/draft [mode] [intention]` — a comment for a mode from the configuration (`comments.intentions`, the engine's base set — `internal`, `update`, `kcs` — unless the deployment replaces it, in the house style, `comments.style`), with optional free-text steering instructions; `[eN:lines]` citations are checked by the engine and editor and stripped outside fenced blocks and inline code for display and copying; kept as an item; the modes are listed when none is given. Never posted by the engine.
 - `/load <expert>` — load an expert's guidance into the conversation.
 - `/experts` — the installed experts, with those loaded.
 - `/evidence [eN[:lines]]` — open the browser (§The evidence browser): at that item and those lines, or, with none given, at the last answer's first citation.
@@ -165,7 +165,7 @@ Commands:
 - `/pin` — keep the last answer as an item.
 - `/items` — open the browser on its items tab: the pinned answers and drafts.
 - `/copy [item]` — copy an item, the last by default, to the clipboard through OSC 52, which reaches it over SSH.
-- `/review [--ranked] [item]` — a second opinion on the last answer as shown, or an item, from the reviewer (`docs/MODEL_API.md` §Answer checks), appended beneath it and to the conversation as another model's reading; with `--ranked`, an experiment, the reviewer is also given the evidence the conversation used most that the text does not cite.
+- `/review [--ranked] [aN]` — a second opinion on the last answer or draft as shown, or `aN` (or an item `iN`), from the reviewer (`docs/MODEL_API.md` §Answer checks), appended beneath it and to the conversation as another model's reading; with `--ranked`, an experiment, the reviewer is also given the evidence the conversation used most that the text does not cite.
 - `/check [aN]` — open the browser's checks tab (§The evidence browser) at the findings of the last answer, or `aN`, at its first span not judged, else its first finding (`docs/MODEL_API.md` §Answer checks).
 - `/model [model] [effort]` — show or switch the model and effort.
 - `/compact` — write a handoff and continue in a new linked conversation (`docs/MODEL_API.md`).

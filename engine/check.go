@@ -1111,13 +1111,7 @@ func answersOf(history []ConversationMessage) []answerAt {
 	views := AnswerViews(history)
 	out := make([]answerAt, len(views))
 	for i, v := range views {
-		out[i] = answerAt{label: v.Label, text: v.Text}
-		for j := v.Original - 1; j >= 0; j-- {
-			if m := history[j]; m.Kind == MessageEngineer || m.Kind == MessageEngine {
-				out[i].draft = m.Kind == MessageEngine && strings.HasPrefix(m.Text, draftLead)
-				break
-			}
-		}
+		out[i] = answerAt{label: v.Label, text: v.Text, draft: v.Draft}
 	}
 	return out
 }
@@ -1204,11 +1198,12 @@ func (s *Session) editorRequest(ctx context.Context, answer answerAt, earlier []
 	return req, err
 }
 
-// ReviewAsk is what the engineer asks reviewed: Item, an item's name such
-// as i3, or the conversation's last answer as shown where it is empty;
-// and, where Ranked, the evidence the conversation used most that the
-// text does not cite given too (uncitedRanked), an experiment the
-// engineer opts into, never the default.
+// ReviewAsk is what the engineer asks reviewed: Item, an answer's or
+// draft's label such as a3 (or an item's name such as i3), or the
+// conversation's last answer as shown where it is empty; and, where
+// Ranked, the evidence the conversation used most that the text does not
+// cite given too (uncitedRanked), an experiment the engineer opts into,
+// never the default.
 type ReviewAsk struct {
 	Item   string
 	Ranked bool
@@ -1241,10 +1236,38 @@ func (s *Session) reviewRequest(ctx context.Context, ask ReviewAsk) (CheckReques
 	if err != nil {
 		return CheckRequest{}, reviewed{}, err
 	}
+	views := AnswerViews(history)
 	answers := answersOf(history)
 	items, err := s.Items(ctx)
 	if err != nil {
 		return CheckRequest{}, reviewed{}, err
+	}
+	answerReview := func(idx int) (string, string, reviewed) {
+		v := views[idx]
+		from := history[v.Original]
+		if history[v.At].Kind == MessageModel {
+			from = history[v.At]
+		}
+		what := "the companion's answer " + v.Label
+		if v.Draft {
+			aud := "customer"
+			if in, ok := s.intentionByID(v.DraftIntention); ok {
+				aud = in.Audience
+			} else {
+				for _, it := range items {
+					if it.Kind == ItemDraft && (it.Text == v.Text || StripDraftCites(v.Text) == it.Text) {
+						aud = it.Audience
+						break
+					}
+				}
+			}
+			what = "the draft " + v.Label
+			if v.DraftIntention != "" {
+				what += " for " + v.DraftIntention
+			}
+			what += ", for " + audienceWords(aud, s.SupportName())
+		}
+		return what, v.Text, reviewed{name: v.Label, invocation: from.Invocation}
 	}
 	var what, body string
 	var of reviewed
@@ -1255,18 +1278,18 @@ func (s *Session) reviewRequest(ctx context.Context, ask ReviewAsk) (CheckReques
 			return CheckRequest{}, reviewed{}, errNothingToCheck
 		}
 		at--
-		what, body = "the companion's answer "+answers[at].label, answers[at].text
-		// The call that wrote what was shown: the revision's, else the
-		// answer's as the model first wrote it.
-		v := AnswerViews(history)[at]
-		from := history[v.Original]
-		if history[v.At].Kind == MessageModel {
-			from = history[v.At]
-		}
-		of = reviewed{name: answers[at].label, invocation: from.Invocation}
+		what, body, of = answerReview(at)
 	default:
+		if k := slices.IndexFunc(views, func(v AnswerView) bool { return v.Label == item }); k >= 0 {
+			at = k
+			what, body, of = answerReview(k)
+			break
+		}
 		i := slices.IndexFunc(items, func(it CompanionItem) bool { return it.Name() == item })
 		if i < 0 {
+			if strings.HasPrefix(item, "a") {
+				return CheckRequest{}, reviewed{}, fmt.Errorf("no answer %s", item)
+			}
 			return CheckRequest{}, reviewed{}, fmt.Errorf("no item %s", item)
 		}
 		of = reviewed{name: item}
@@ -1275,8 +1298,12 @@ func (s *Session) reviewRequest(ctx context.Context, ask ReviewAsk) (CheckReques
 		if it.Kind == ItemDraft {
 			what = "the draft " + item + " for " + it.Intention + ", for " + audienceWords(it.Audience, s.SupportName())
 		}
-		if j := lastIndexOfText(answers, it.Text); j >= 0 {
-			at = j
+		for j := len(answers) - 1; j >= 0; j-- {
+			if answers[j].text == it.Text || (it.Kind == ItemDraft && answers[j].draft && StripDraftCites(answers[j].text) == it.Text) {
+				at = j
+				body = answers[j].text
+				break
+			}
 		}
 	}
 	c, err := s.checked(ctx, body, nil)
@@ -1288,7 +1315,9 @@ func (s *Session) reviewRequest(ctx context.Context, ask ReviewAsk) (CheckReques
 	if len(cites) == 0 {
 		var labels []string
 		cites, labels = writtenFrom(answers, at, func(a answerAt) bool {
-			return slices.ContainsFunc(items, func(it CompanionItem) bool { return it.Kind == ItemDraft && it.Text == a.text })
+			return a.draft || slices.ContainsFunc(items, func(it CompanionItem) bool {
+				return it.Kind == ItemDraft && (it.Text == a.text || StripDraftCites(a.text) == it.Text)
+			})
 		})
 		source = "It cites no evidence; the items below are those cited by the answers it was written from"
 		if len(labels) > 0 {
@@ -1369,16 +1398,6 @@ func (s *Session) uncitedRanked(ctx context.Context, history []ConversationMessa
 		body = "\nNone: the conversation used no evidence the text does not cite.\n"
 	}
 	return "\n" + uncitedIntro + body, items, nil
-}
-
-// lastIndexOfText is the last of answers whose text is t, or -1.
-func lastIndexOfText(answers []answerAt, t string) int {
-	for j := len(answers) - 1; j >= 0; j-- {
-		if answers[j].text == t {
-			return j
-		}
-	}
-	return -1
 }
 
 func audienceWords(a, supportName string) string {

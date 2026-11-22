@@ -272,3 +272,20 @@ Delivers: The companion, User interface.
 
 Done when: `make check` passes; and `engine.TestRenderLedgerByComment` and `chat.TestLedgerCommand` verify compact-tag
 rendering on both fresh and legacy stored ledger rows.
+
+## 18. Three-mode comment drafts, optional steering and post-editor citation stripping
+
+Status: done
+
+The base comment intentions consolidate to `internal` (internal note), `update` (customer update and read-only data
+requests) and `kcs` (reusable KCS draft), each instructing restrained Markdown and inline fenced code blocks naming real
+files or commands. `Session.Draft` accepts `<mode> [intention]` so free-text steering appends while preserving the
+mode's audience and certainty rules. `[eN:lines]` citations stay through `CheckCites`, `AnswerFlags`, the editor and
+anchor revision, and remain in the stored conversation history for `/review [aN]` and ranked evidence, while
+`engine.StripDraftCites` strips them outside fenced blocks and inline code for displayed and copied drafts.
+
+Delivers: The companion, User interface.
+
+Done when: `make check` passes; `engine.TestBaseConfigUnderTheDeployment` verifies the three base modes;
+`engine.TestEditorDraftKeepsCorrection` and `engine.TestStripDraftCitesAndCustomIntention` verify steering, post-editor
+`[eN]` stripping and citation resolution on `/review a1`; and `chat.TestReviewCommand` verifies `/review a2` on a draft.
