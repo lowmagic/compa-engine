@@ -9,11 +9,34 @@ import (
 
 // commandCompletion belongs to one chat model. Its state never enters the
 // transcript; changing the input starts a fresh selection and reopens it.
+// args, where set, gives a command's argument options once its name and a
+// space are typed (argOptions); without it only names are completed.
 type commandCompletion struct {
 	input     string
 	selected  int
 	dismissed bool
-	options   []commandSpec
+	options   []completionOption
+	args      func(input string) []completionOption
+}
+
+// completionOption is one row of the popover: what tab completes the
+// input to, what enter runs, empty where enter completes as tab does, and
+// how the row reads.
+type completionOption struct {
+	complete, run      string
+	label, description string
+}
+
+// commandOption is a command's name as an option: completed with a space
+// where it takes arguments, and run by enter where it takes none.
+func commandOption(c commandSpec) completionOption {
+	o := completionOption{complete: "/" + c.name, label: c.label(), description: c.description}
+	if c.args != "" {
+		o.complete += " "
+	} else {
+		o.run = o.complete
+	}
+	return o
 }
 
 // slashMatches only completes command names, not arguments or multiline input.
@@ -31,10 +54,47 @@ func slashMatches(input string) []commandSpec {
 	return matches
 }
 
-func (c *commandCompletion) matches(input string) []commandSpec {
+// optionsFor are the options for input: the command names it begins, or,
+// past a name and a space, the command's arguments it begins.
+func (c *commandCompletion) optionsFor(input string) []completionOption {
+	if names := slashMatches(input); len(names) > 0 {
+		out := make([]completionOption, 0, len(names))
+		for _, n := range names {
+			out = append(out, commandOption(n))
+		}
+		return out
+	}
+	if c.args == nil || !strings.HasPrefix(input, "/") || strings.ContainsAny(input, "\n\t") {
+		return nil
+	}
+	var out []completionOption
+	for _, o := range c.args(input) {
+		if strings.HasPrefix(o.complete, input) && o.complete != input && o.run != input {
+			out = append(out, o)
+		}
+	}
+	return out
+}
+
+// runs says whether input is an argument option typed whole, as /copy a1
+// is where a10 is offered too, or /debug load with no expert: enter runs
+// it as typed, as it does a command's name.
+func (c *commandCompletion) runs(input string) bool {
+	if c.args == nil {
+		return false
+	}
+	for _, o := range c.args(input) {
+		if o.run == input || strings.TrimSpace(o.complete) == input {
+			return true
+		}
+	}
+	return false
+}
+
+func (c *commandCompletion) matches(input string) []completionOption {
 	if input != c.input {
 		c.input, c.selected, c.dismissed = input, 0, false
-		c.options = slashMatches(input)
+		c.options = c.optionsFor(input)
 	}
 	if c.dismissed {
 		return nil
@@ -46,6 +106,9 @@ func (c *commandCompletion) matches(input string) []commandSpec {
 // the caller should submit the replacement through its usual enter handler.
 // It never executes a command itself. Exact typed commands pass Enter through,
 // even when they accept arguments: /draft and /model still list their choices.
+// Enter on an option that runs submits it; tab completes it, and where the
+// completion has options of its own, as /draft followed by a space, they
+// show at once.
 func (c *commandCompletion) key(input, key string) (value string, handled, submit bool) {
 	matches := c.matches(input)
 	if len(matches) == 0 {
@@ -63,7 +126,7 @@ func (c *commandCompletion) key(input, key string) (value string, handled, submi
 		c.selected = min(c.selected+1, len(matches)-1)
 		return input, true, false
 	case "enter":
-		if commandNamed(input[1:]).name != "" {
+		if commandNamed(input[1:]).name != "" || c.runs(input) {
 			return input, false, false
 		}
 	case "tab":
@@ -71,12 +134,14 @@ func (c *commandCompletion) key(input, key string) (value string, handled, submi
 		return input, false, false
 	}
 	chosen := matches[c.selected]
-	value = "/" + chosen.name
-	if chosen.args != "" {
-		value += " "
+	value, submit = chosen.complete, false
+	if key == "enter" && chosen.run != "" {
+		value, submit = chosen.run, true
 	}
-	c.input, c.selected, c.dismissed = value, 0, true
-	return value, true, key == "enter" && chosen.args == ""
+	c.input, c.selected = value, 0
+	c.options = c.optionsFor(value)
+	c.dismissed = submit || !strings.HasSuffix(value, " ") || len(c.options) == 0
+	return value, true, submit
 }
 
 // rows reserves its last row for keys and scrolls only the option window.
@@ -96,7 +161,11 @@ func (c *commandCompletion) rows(input string, width, room int) []string {
 		if i == c.selected {
 			mark = "› "
 		}
-		row := ansi.Truncate(mark+matches[i].label()+" — "+matches[i].description, width, "…")
+		row := mark + matches[i].label
+		if matches[i].description != "" {
+			row += " — " + matches[i].description
+		}
+		row = ansi.Truncate(row, width, "…")
 		if i == c.selected {
 			row = cursorW.Render(row)
 		} else {

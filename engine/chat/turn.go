@@ -26,17 +26,15 @@ const (
 	// kindOpening reads the case and runs the opening turn.
 	kindOpening turnKind = iota
 	kindAnswer
-	kindAnalysis
 	kindDraft
 	kindCompact
 	kindLoad
 	// kindLedger reads the comments the ledger has not, if any, and shows
 	// the ledger.
 	kindLedger
-	// kindReload goes on with the conversation a way /reload names, and
-	// kindCatchUp asks what changed since the case was last worked.
+	// kindReload goes on in a new conversation from the case's state and
+	// a handoff, /compact in a case.
 	kindReload
-	kindCatchUp
 	// kindReview has the reviewer review the last answer or an item.
 	kindReview
 )
@@ -79,7 +77,11 @@ type turnState struct {
 // when either has changed.
 func (t *turnState) rendered(width int) string {
 	if t.live.Len() != t.shownLen || width != t.shownAt {
-		t.shown = markdown(text.Safe(t.live.String()), width, nil)
+		raw := t.live.String()
+		if t.kind == kindDraft {
+			raw = engine.StripDraftCites(raw)
+		}
+		t.shown = markdown(text.Safe(raw), width, nil)
 		t.shownLen, t.shownAt = t.live.Len(), width
 	}
 	return t.shown
@@ -107,12 +109,15 @@ type toolRun struct {
 // them by span, its findings that take no verdict, and the anchors asked
 // of its revision, which are no finding, for the checks tab.
 type answer struct {
-	label    string
-	cites    []engine.Cite
-	flags    []engine.AnswerFlag
-	verdicts map[string]engine.SpanVerdict
-	reads    []reading
-	asks     []reading
+	label string
+	// draft is a draft's mode, empty for an answer, and preview the
+	// start of the text shown, for /copy's options.
+	draft, preview string
+	cites          []engine.Cite
+	flags          []engine.AnswerFlag
+	verdicts       map[string]engine.SpanVerdict
+	reads          []reading
+	asks           []reading
 }
 
 // Messages a turn sends as it runs, and its end.
@@ -136,18 +141,16 @@ type (
 		kind  turnKind
 		reply engine.TalkReply
 		// text is what the turn ends with to print: an answer, a draft or
-		// a handoff; item a draft's item; loaded the expert loaded.
-		text   string
-		item   engine.CompanionItem
-		loaded string
+		// a handoff; item a draft's item; draftIntention a restored draft's
+		// intention; loaded the expert loaded.
+		text           string
+		item           engine.CompanionItem
+		draftIntention string
+		loaded         string
 		// ledger is the case ledger as /ledger shows it.
 		ledger string
-		// reopen is a reopened case's state, offer what reloading it
-		// costs, for the choices the opening offers; reloaded what a
-		// reload did; note a line of the chat's own the turn ends with
-		// in place of an answer.
-		reopen   *engine.ReopenState
-		offer    engine.ReloadOffer
+		// reloaded is what a reload did; note a line of the chat's own
+		// the turn ends with in place of an answer.
 		reloaded *engine.Reloaded
 		note     string
 		// cites are text's citations, checks their checks, or checkErr why
@@ -181,7 +184,6 @@ type turnWork func(ctx context.Context, on func(engine.TalkEvent), send func(tea
 func (m *model) startTurn(kind turnKind, status string, work turnWork) {
 	s := m.s
 	t := &turnState{kind: kind, status: status, model: m.current}
-	m.reviewOffer, m.checkOffer = "", ""
 	if s.EditsAnswers() && kind != kindCompact && kind != kindLoad && kind != kindLedger && kind != kindReload && kind != kindReview {
 		t.mark = markChecking
 	}
@@ -243,8 +245,8 @@ func (m *model) startTurn(kind turnKind, status string, work turnWork) {
 // comments, counts and inventory, and, for a case new to the companion
 // unless --no-open, the ledger beside them, waited for up to its bound
 // before the opening turn. A case reopened makes no model call: the chat
-// says what is new since it was last worked instead, and offers the ways
-// on where the cache has expired and the catch-up where there is news.
+// says what is new since it was last worked instead, and what the next
+// call resends where the cache has expired, offering nothing to choose.
 // --no-open skips only model calls, never the saved history.
 func (m *model) opening() {
 	s, open := m.s, !m.noOpen
@@ -293,13 +295,7 @@ func (m *model) opening() {
 			for _, l := range reopenLines(r) {
 				send(noteMsg{noteLine(l)})
 			}
-			d := turnDone{reopen: &r}
-			if r.CacheExpired && r.Large {
-				if d.offer, err = s.ReloadOffer(ctx); err != nil {
-					return turnDone{err: err}
-				}
-			}
-			return d
+			return turnDone{}
 		}
 		if !open {
 			return turnDone{}
@@ -389,11 +385,11 @@ func reopenLines(r engine.ReopenState) []string {
 	}
 	lines := []string{"nothing new since you last worked this case (" + since + ")"}
 	if len(news) > 0 {
-		lines[0] = "since you last worked this case (" + since + "): " + strings.Join(news, ", ") + "; the conversation is given them at your next message"
+		lines[0] = "since you last worked this case (" + since + "): " + strings.Join(news, ", ") + "; your next message gives them to the conversation, and /ledger reads the comments"
 	}
 	if r.CacheExpired && r.Large {
 		lines = append(lines, "the provider's cache has expired since the last call ("+r.LastCall.Local().Format("2006-01-02 15:04")+
-			"): the next call resends the conversation, about "+engine.Thousands(r.Estimate)+" tokens, without it")
+			"): your next message resends the conversation, about "+engine.Thousands(r.Estimate)+" tokens, without it; /compact goes on in a new one from the case's state and a handoff")
 	}
 	return lines
 }
@@ -829,16 +825,12 @@ func (m *model) done(d turnDone) tea.Cmd {
 	if t != nil && d.kind != kindLedger && d.kind != kindReview && (d.kind != kindOpening || d.reply.Conversation != "" || d.err != nil) {
 		m.lastTools = t.tools
 	}
-	if d.kind == kindReload {
-		// The catch-up waits for the reload, whatever came of it.
-		defer m.offerCatchUp()
-	}
 	switch {
 	case errors.Is(d.err, context.Canceled):
 		// An answer the editor had checked or was checking is kept as
 		// shown, so it is printed as reopening prints it.
 		if d.check.Ran && strings.TrimSpace(d.text) != "" && t != nil {
-			m.printAnswer(d, t.model, false)
+			m.printAnswer(d, t.model)
 		}
 		release()
 		m.print(noteLine("cancelled"))
@@ -865,40 +857,16 @@ func (m *model) done(d turnDone) tea.Cmd {
 		m.print(noteLine(d.note))
 		return nil
 	}
-	if d.reopen != nil {
-		m.offerReopen(*d.reopen, d.offer)
-	}
 	model := engine.CompanionModel{}
 	if t != nil {
 		model = t.model
-	}
-	if d.kind == kindReload {
-		m.reloaded(d, model)
-		return nil
 	}
 	if d.kind == kindReview {
 		m.printReview(*d.review)
 		return nil
 	}
-	m.printAnswer(d, model, true)
-	release()
-	if d.kind == kindDraft && d.item.Seq != 0 {
-		m.offerReview(d.item.Name())
-	}
+	m.printAnswer(d, model)
 	return nil
-}
-
-// offerReview offers the reviewer's review of the item named, where the
-// deployment configures a reviewer: the r key takes the offer while the
-// input is empty, until the next thing is sent or the next turn begins;
-// nothing is called until it is taken.
-func (m *model) offerReview(item string) {
-	reviewer := m.s.ReviewerModel()
-	if reviewer == "" {
-		return
-	}
-	m.reviewOffer = item
-	m.print(noteLine("r reviews it with " + reviewer))
 }
 
 // review has the reviewer review what ask names, an item or the last
@@ -963,10 +931,9 @@ func (m *model) printReview(r engine.Review) {
 // changing the turn running. Restored answers use the same presentation.
 // Its findings are in the checks tab, and beneath it one line says how
 // many, one notes the citations resolved on a showing not the
-// conversation's own (viaLine), and one sums up the anchors asked of its
-// revision, listed in the tab too (asksLine); offer offers the tab on f,
-// as at the end of the turn that wrote it.
-func (m *model) printAnswer(d turnDone, model engine.CompanionModel, offer bool) {
+// conversation's own (viaLine), and one quiet footer names the answer,
+// model, usage and check summary (/debug adds the anchor breakdown).
+func (m *model) printAnswer(d turnDone, model engine.CompanionModel) {
 	if strings.TrimSpace(d.text) == "" {
 		// An opening skipped, --no-open, has nothing to say.
 		if d.kind != kindOpening || d.reply.Conversation != "" {
@@ -974,9 +941,20 @@ func (m *model) printAnswer(d turnDone, model engine.CompanionModel, offer bool)
 		}
 		return
 	}
+	if d.kind != kindDraft && d.kind != kindCompact && d.kind != kindReload {
+		m.hasNext = hasNextSteps(d.text)
+		m.refreshPlaceholder()
+	}
 	// A blank row between the turn's tool lines, or the engineer's words,
-	// and the answer.
-	m.print("", markdown(text.Safe(strings.TrimSpace(d.text)), m.cols(), marksOf(d.cites, d.checks)))
+	// and the answer. Drafts strip [eN] citations for display after checks run.
+	shownText := strings.TrimSpace(d.text)
+	var marks citeMarks
+	if d.kind == kindDraft {
+		shownText = strings.TrimSpace(engine.StripDraftCites(d.text))
+	} else {
+		marks = marksOf(d.cites, d.checks)
+	}
+	m.print("", markdown(text.Safe(shownText), m.cols(), marks))
 	if d.checkErr != nil {
 		m.print(warnLine("the citations could not be checked: " + d.checkErr.Error()))
 	}
@@ -984,7 +962,13 @@ func (m *model) printAnswer(d turnDone, model engine.CompanionModel, offer bool)
 		m.print(warnLine("the answer's own checks could not run: " + d.flagErr.Error()))
 	}
 	a := answer{label: "a" + strconv.Itoa(len(m.answers)+1), flags: d.flags, verdicts: map[string]engine.SpanVerdict{},
-		reads: readings(d.cites, d.checks, d.flags, d.check), asks: asked(d.check)}
+		reads: readings(d.cites, d.checks, d.flags, d.check), asks: asked(d.check), preview: preview(shownText)}
+	if d.kind == kindDraft {
+		a.draft = d.item.Intention
+		if a.draft == "" {
+			a.draft = d.draftIntention
+		}
+	}
 	for _, c := range d.cites {
 		if c.Name != "" {
 			a.cites = append(a.cites, c)
@@ -993,15 +977,17 @@ func (m *model) printAnswer(d turnDone, model engine.CompanionModel, offer bool)
 	for _, v := range d.verdicts {
 		a.verdicts[v.Span] = v
 	}
-	if l := findingsLine(a, offer); l != "" {
+	if l := findingsLine(a); l != "" {
 		m.print(l)
 	}
 	if l := viaLine(d.cites, d.checks); l != "" {
 		m.print(noteLine(l))
 	}
 	m.print(checkNotes(d.check)...)
-	if l := asksLine(a, offer); l != "" {
-		m.print(noteLine(l))
+	if m.debug {
+		if l := asksLine(a); l != "" {
+			m.print(noteLine(l))
+		}
 	}
 	foot := []string{a.label}
 	if model.Name != "" {
@@ -1011,27 +997,33 @@ func (m *model) printAnswer(d turnDone, model engine.CompanionModel, offer bool)
 		foot = append(foot, d.usage)
 	}
 	foot = append(foot, d.check.Words()...)
+	if !m.debug && len(a.asks) > 0 {
+		if !d.check.Revised {
+			foot = append(foot, "asked "+text.Plural(len(a.asks), "anchor"))
+		}
+		foot = append(foot, "/check "+a.label+" lists anchors")
+	}
 	if d.check.Changed() {
 		foot = append(foot, "the original in the turns tab")
 	}
 	switch d.kind {
 	case kindDraft:
-		if d.item.Seq != 0 {
-			foot = append(foot, "the draft "+d.item.Intention+" kept as "+d.item.Name()+"; /copy "+d.item.Name()+" copies it")
-		} else {
+		switch {
+		case d.item.Seq != 0:
+			foot = append(foot, "draft: "+d.item.Intention, "/copy "+a.label+" copies it", "/review "+a.label+" for a second opinion")
+		case errors.Is(d.err, context.Canceled):
 			foot = append(foot, "the draft was not kept: its turn was cancelled")
+		case d.draftIntention != "":
+			foot = append(foot, "draft: "+d.draftIntention)
 		}
 	case kindCompact:
-		foot = append(foot, "a handoff: the conversation goes on in a new one, begun from it and the pinned items")
+		foot = append(foot, "a handoff: the conversation goes on in a new one, begun from it and the drafts kept")
 	case kindReload:
-		foot = append(foot, "a handoff: the conversation goes on in a new one, begun from the case as it is now, the ledger, the handoff, the pinned items, "+
+		foot = append(foot, "a handoff: the conversation goes on in a new one, begun from the case as it is now, the ledger, the handoff, the drafts kept, "+
 			text.Plural(d.reloaded.Ranked, "ranked item")+" and the last exchange")
 	}
 	m.print(noteLine(strings.Join(foot, " · ")))
 	m.answers = append(m.answers, a)
-	if n, _ := a.findings(); offer && n+len(a.asks) > 0 {
-		m.checkOffer = a.label
-	}
 	if d.reply.Compact {
 		m.print(noteLine("the conversation is long: /compact writes a handoff and goes on in a new one"))
 	}

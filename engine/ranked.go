@@ -194,14 +194,22 @@ func rankUses(history []ConversationMessage, items []CompanionItem) []rankUse {
 		}
 	}
 	// The items each message carries: the newest answer shown with the
-	// same text, else the newest message made by the time the item was.
-	kept := map[int][]CompanionItem{}
+	// same text (or stripped draft text), else the newest message made by
+	// the time the item was.
+	type keptItem struct {
+		item CompanionItem
+		text string
+	}
+	kept := map[int][]keptItem{}
 	asAnswer := map[int]bool{}
 	for _, it := range items {
 		at := -1
+		citeText := it.Text
 		for i := len(history) - 1; i >= 0; i-- {
-			if v, ok := shown[i]; ok && strings.TrimSpace(v.Text) == strings.TrimSpace(it.Text) {
+			if v, ok := shown[i]; ok && (strings.TrimSpace(v.Text) == strings.TrimSpace(it.Text) ||
+				(it.Kind == ItemDraft && v.Draft && strings.TrimSpace(StripDraftCites(v.Text)) == strings.TrimSpace(it.Text))) {
 				at = i
+				citeText = v.Text
 				asAnswer[i] = true
 				break
 			}
@@ -215,7 +223,7 @@ func rankUses(history []ConversationMessage, items []CompanionItem) []rankUse {
 				}
 			}
 		}
-		kept[at] = append(kept[at], it)
+		kept[at] = append(kept[at], keptItem{item: it, text: citeText})
 	}
 	var uses []rankUse
 	for i, m := range history {
@@ -251,8 +259,8 @@ func rankUses(history []ConversationMessage, items []CompanionItem) []rankUse {
 				}
 			}
 		}
-		for _, it := range kept[i] {
-			uses = append(uses, citeUses(Cites(it.Text), rankPinned, age, "cited in "+it.Name())...)
+		for _, k := range kept[i] {
+			uses = append(uses, citeUses(Cites(k.text), rankPinned, age, "cited in "+k.item.Name())...)
 		}
 	}
 	return uses

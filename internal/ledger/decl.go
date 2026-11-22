@@ -41,7 +41,7 @@ func Decl() model.Tool {
 		"properties": map[string]any{
 			"kind":       enum("What the comment does.", Asks, Commits, Reports, Provides),
 			"who":        enum("Whose comment it is, from its author kind.", "customer", "support"),
-			"text":       map[string]any{"type": "string", "description": "The item in one line, in your words: what, where and when.", "maxLength": 300},
+			"text":       map[string]any{"type": "string", "description": "The item in one line, in your words: what, where and when, without opening with asks, reports, commits, provides, customer or support.", "maxLength": 300},
 			"comment":    str(comment),
 			"due":        str("For a commitment, when it was promised by, as the comment says it."),
 			"attachment": str("For what was provided, the attachment exactly as the comment names it."),

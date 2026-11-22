@@ -186,10 +186,10 @@ func asked(c engine.AnswerCheck) []reading {
 	return out
 }
 
-// asksLine is the one line beneath an answer whose revision was asked to
-// fulfil anchors: how many, by kind, most first, and what opens them in
-// the checks tab, f where it is offered; empty where there are none.
-func asksLine(a answer, offered bool) string {
+// asksLine is the one line under /debug beneath an answer whose revision was
+// asked to fulfil anchors: how many, by kind, most first, and what opens them
+// in the checks tab; empty where there are none.
+func asksLine(a answer) string {
 	if len(a.asks) == 0 {
 		return ""
 	}
@@ -213,9 +213,6 @@ func asksLine(a answer, offered bool) string {
 		head += ", all " + kinds[0]
 	default:
 		head += ", " + kinds[0]
-	}
-	if offered {
-		return head + " · f opens the checks tab"
 	}
 	return head + " · /check " + a.label + " lists them"
 }
@@ -253,25 +250,18 @@ func (a answer) findings() (n, judged int) {
 }
 
 // findingsLine is the one line beneath an answer with findings: how many,
-// how many of them judged, and what opens them in the checks tab, f where
-// it is offered; empty where there are none.
-func findingsLine(a answer, offered bool) string {
+// how many of them judged, and /check to open them in the checks tab; empty
+// where there are none.
+func findingsLine(a answer) string {
 	n, judged := a.findings()
 	if n == 0 {
 		return ""
 	}
 	head := "⚠ " + text.Plural(n, "finding")
-	switch {
-	case judged > 0:
+	if judged > 0 {
 		head += ", " + strconv.Itoa(judged) + " judged"
-	case offered:
-		head += " to review"
 	}
-	how := " · /check " + a.label + " opens them"
-	if offered {
-		how = " · f opens the checks tab"
-	}
-	return warnW.Render(head) + faintW.Render(how)
+	return warnW.Render(head) + faintW.Render(" · /check "+a.label+" opens them")
 }
 
 // verdictMsg is the verdict kept on a span of the answer labelled, or why
@@ -488,12 +478,8 @@ func (m *model) checksKey(k tea.KeyPressMsg) {
 		p.cur = min(p.cur+1, len(p.values)-1)
 	case "y", "enter":
 		m.judgeValue(engine.VerdictSupported)
-	case "i":
-		m.judgeValue(engine.VerdictInferred)
-	case "u":
-		m.judgeValue(engine.VerdictUnsupported)
 	case "x":
-		m.judgeValue(engine.VerdictIncorrect)
+		m.judgeValue(xVerdict(v))
 	case "m":
 		ranges, _ := m.shownRanges(v)
 		if len(ranges) == 0 {
@@ -551,12 +537,22 @@ func (m *model) dropMark() {
 
 // verdictKeys are the keys that judge a value, in the tab and on an item
 // open in it; enter is supported in the tab only, as on an item it keeps
-// the lines marked.
+// the lines marked. x is the value wrong: unsupported where no line backs
+// it and none is marked, else incorrect (xVerdict).
 var verdictKeys = map[string]engine.VerdictKind{
 	"y": engine.VerdictSupported,
-	"i": engine.VerdictInferred,
-	"u": engine.VerdictUnsupported,
 	"x": engine.VerdictIncorrect,
+}
+
+// xVerdict is what x keeps of a value: unsupported where no line of the
+// evidence is close to it and the engineer marked none, so nothing it
+// could be checked against exists; incorrect otherwise, resting on the
+// lines marked or the closest line.
+func xVerdict(v checkValue) engine.VerdictKind {
+	if v.flag.Unsupported() && len(v.marks) == 0 {
+		return engine.VerdictUnsupported
+	}
+	return engine.VerdictIncorrect
 }
 
 // checksMarkKey is a key on an item open in the checks tab: the cursor
@@ -578,6 +574,9 @@ func (m *model) checksMarkKey(key string) {
 		return
 	}
 	if kind, ok := verdictKeys[key]; ok {
+		if key == "x" {
+			kind = xVerdict(*v)
+		}
 		p.view, p.listing = nil, false
 		m.judgeValue(kind)
 		return
@@ -608,7 +607,7 @@ func (m *model) checksMarkKey(key string) {
 	}
 	o.from, o.to = from, to
 	v.marks = append(v.marks, r)
-	b.note = r.Place() + " marked for " + v.label + " " + v.shown() + ": y, i or x takes " + places(v.marks)
+	b.note = r.Place() + " marked for " + v.label + " " + v.shown() + ": y or x takes " + places(v.marks)
 }
 
 // spanShown is a span as the tab shows it.
@@ -772,7 +771,7 @@ func (m *model) checksView(w, room int) ([]string, string) {
 	switch {
 	case p.view != nil:
 		return append([]string{faintW.Render("marking " + target)}, p.view.view(w, room-1, "")...),
-			"↑↓ move · v marks, enter keeps it for the value · d unmarks the last · y i u x judge it · esc back"
+			"↑↓ move · v marks, enter keeps it for the value · d unmarks the last · y or x judges it · esc back"
 	case p.listing:
 		keys := "type to filter · ↑↓ move · enter opens · esc back to the value"
 		if b.filter != "" {
@@ -783,7 +782,7 @@ func (m *model) checksView(w, room int) ([]string, string) {
 	body := m.valueRows(w, max(min(len(p.values), room/3), 1))
 	body = append(body, "")
 	body = append(body, m.valueDetail(v, w)...)
-	return body, "y supported · i inferred · u unsupported · x incorrect · m marks · d unmarks · e any item · ↑↓"
+	return body, "y supported · x wrong · m marks · d unmarks · e any item · ↑↓"
 }
 
 // valueRows are the findings' rows that fit in room, the cursor's in
@@ -854,7 +853,7 @@ func (m *model) valueDetail(v checkValue, w int) []string {
 			verdict += "; the model is told"
 		}
 	} else if v.flag.Arithmetic {
-		verdict = kindMarks[engine.VerdictIncorrect] + " incorrect, by the engine: the arithmetic does not hold; y, i, u or x overrides it"
+		verdict = kindMarks[engine.VerdictIncorrect] + " incorrect, by the engine: the arithmetic does not hold; y or x overrides it"
 	}
 	out = append(out, detailField("Verdict:", verdict, w, 2)...)
 	ranges, what := m.shownRanges(v)

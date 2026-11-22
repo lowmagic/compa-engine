@@ -5,8 +5,6 @@ import (
 	"strings"
 	"testing"
 
-	tea "charm.land/bubbletea/v2"
-
 	"github.com/lowmagic/compa-engine/engine"
 	"github.com/lowmagic/compa-engine/engine/enginetest"
 )
@@ -38,88 +36,39 @@ func reviewedSession(t *testing.T) (*engine.Session, string) {
 	return s, reviewer
 }
 
-// draftReview is the review of the draft i1 as printed.
+// draftReview is the review of the draft a2 as printed.
 var draftReview = []string{
 	`⚠ s1 certainty · "the investigation confirms the OVN controller on worker-1 cannot sync" · e1:2 shows one sync error on worker-1, not a cause (e1:2)`,
 	"alternative: a transient API outage during the sync · discriminator: the controller's log after the error, not given",
 	"at most: the OVN controller on worker-1 reported a sync error",
-	"review of i1 · 1 statement: 0 supported, 1 finding, 0 skipped · ",
+	"review of a2 · 1 statement: 0 supported, 1 finding, 0 skipped · ",
 }
 
 // unwrapped is s with every space gone, so a check of a long path holds
 // wherever the chat wrapped it.
 func unwrapped(s string) string { return strings.Join(strings.Fields(s), "") }
 
-// TestReviewOfferedAfterDraft: [E3] a draft kept is followed by the offer
-// of a review on r, naming the reviewer's model, and nothing is called
-// until it is taken: r as the first key, on the empty input, takes it, the
-// status bar saying the reviewer is reviewing the draft, and the review is
-// printed beneath with its findings and its footer. The offer is taken
-// once.
-func TestReviewOfferedAfterDraft(t *testing.T) {
-	s, reviewer := reviewedSession(t)
+// TestLeadingRTypesNormallyAfterDraft: [E3] a draft prints no single-key r
+// offer, and typing a message beginning with r on the empty input after a
+// draft types into the input without calling the reviewer; /review runs only
+// when asked explicitly.
+func TestLeadingRTypesNormallyAfterDraft(t *testing.T) {
+	s, _ := reviewedSession(t)
 	h := start(t, s, Options{NoOpen: true})
 	h.say("fail please")
 	h.say("/draft customer-update")
-	if out := flat(h.out()); !strings.Contains(out, "kept as i1") || !strings.HasSuffix(unwrapped(out), unwrapped("r reviews it with "+reviewer)) {
+	if out := flat(h.out()); !strings.Contains(out, "/review a2 for a second opinion") || strings.Contains(out, "r reviews it with") {
 		t.Fatalf("/draft printed:\n%s", out)
 	}
 	was := calls(t, s)
-	h.press("r")
-	if h.m.turn == nil || h.m.turn.status != "the reviewer is reviewing i1" || !strings.Contains(h.view(), "the reviewer is reviewing i1") {
-		t.Fatalf("r on the empty input began no review; the view:\n%s", h.view())
-	}
-	h.settle()
-	out := flat(h.out())
-	for _, want := range append(draftReview, "› /review i1") {
-		if !strings.Contains(out, want) {
-			t.Errorf("the review lacks %q:\n%s", want, out)
-		}
-	}
-	if !strings.Contains(unwrapped(out), unwrapped("skipped · "+reviewer)) {
-		t.Errorf("the review does not name the reviewer's model:\n%s", out)
-	}
-	if calls(t, s) != was+1 {
-		t.Errorf("%d calls after the review, %d before; want one more", calls(t, s), was)
-	}
-	h.press("r")
-	if h.m.input.Value() != "r" || h.m.turn != nil {
-		t.Errorf("r after the offer was taken: the input %q, a turn %v", h.m.input.Value(), h.m.turn != nil)
+	h.typed("read the controller log")
+	if h.m.input.Value() != "read the controller log" || h.m.turn != nil || calls(t, s) != was {
+		t.Errorf("typing r-message after draft: input %q, turn %v, calls %d (was %d)", h.m.input.Value(), h.m.turn != nil, calls(t, s), was)
 	}
 }
 
-// TestReviewOfferEndsOnOtherInput: [E3] any key but the offer's r, or a
-// paste, ends the offer: an r that then begins a new message is typed,
-// and no reviewer is called.
-func TestReviewOfferEndsOnOtherInput(t *testing.T) {
-	for _, c := range []struct {
-		name  string
-		input func(h *harness)
-	}{
-		{"typed and erased", func(h *harness) { h.press("w", "backspace") }},
-		{"pasted and erased", func(h *harness) {
-			h.update(tea.PasteMsg{Content: "w"})
-			h.press("backspace")
-		}},
-	} {
-		t.Run(c.name, func(t *testing.T) {
-			s, _ := reviewedSession(t)
-			h := start(t, s, Options{NoOpen: true})
-			h.say("fail please")
-			h.say("/draft customer-update")
-			was := calls(t, s)
-			c.input(h)
-			h.press("r")
-			h.settle()
-			if h.m.input.Value() != "r" || h.m.turn != nil || calls(t, s) != was {
-				t.Errorf("r after other input: the input %q, a turn %v, %d calls after %d", h.m.input.Value(), h.m.turn != nil, calls(t, s), was)
-			}
-		})
-	}
-}
-
-// TestReviewCommand: [E3] /review reviews the last answer and /review i1
-// the draft kept, each printed beneath with its findings and footer,
+// TestReviewCommand: [E3] /review reviews the last answer and /review a2
+// the draft, each printed beneath with its findings and footer,
 // neither an answer: the next answer is a3, after a1 and the draft. The
 // turns tab lists each review by what it is of, and a reopened chat
 // prints them the same, in place.
@@ -134,7 +83,7 @@ func TestReviewCommand(t *testing.T) {
 	}
 	h.settle()
 	h.say("/draft customer-update")
-	h.say("/review i1")
+	h.say("/review a2")
 	h.say("anchor please")
 	answerReview := []string{
 		`⚠ s1 overstated · "logs nothing new" · e1:2 is one line of the log, not the whole of it (e1:2)`,
@@ -162,16 +111,16 @@ func TestReviewCommand(t *testing.T) {
 		}
 	}
 	v := reopened.turnsTab()
-	if a1, r1, ri := strings.Index(v, "  a1 · "), strings.Index(v, "  review of a1 · "), strings.Index(v, "  review of i1 · "); a1 < 0 || r1 < a1 || ri < r1 {
+	if a1, r1, ra2 := strings.Index(v, "  a1 · "), strings.Index(v, "  review of a1 · "), strings.Index(v, "  review of a2 · "); a1 < 0 || r1 < a1 || ra2 < r1 {
 		t.Errorf("the turns tab:\n%s", v)
 	}
 }
 
 // TestReviewRanked: /review --ranked reviews the last answer and /review
-// --ranked i1 the draft, each given the evidence used most and not cited,
+// --ranked a2 the draft, each given the evidence used most and not cited,
 // the status bar saying so, the scripted reviewer answering a request
 // that carries it; /review alone does not carry it, and arguments other
-// than --ranked and one item are refused with the command's form.
+// than --ranked and one target are refused with the command's form.
 func TestReviewRanked(t *testing.T) {
 	s, _ := reviewedSession(t)
 	h := start(t, s, Options{NoOpen: true})
@@ -191,19 +140,19 @@ func TestReviewRanked(t *testing.T) {
 		t.Errorf("/review after /review --ranked printed:\n%s", out)
 	}
 	h.say("/draft customer-update")
-	h.typed("/review i1 --ranked")
+	h.typed("/review a2 --ranked")
 	h.press("enter")
-	if h.m.turn == nil || h.m.turn.status != "the reviewer is reviewing i1, given the evidence used most and not cited" {
-		t.Fatal("/review i1 --ranked began no review given the ranked evidence")
+	if h.m.turn == nil || h.m.turn.status != "the reviewer is reviewing a2, given the evidence used most and not cited" {
+		t.Fatal("/review a2 --ranked began no review given the ranked evidence")
 	}
 	h.settle()
-	if out := flat(h.out()); !strings.Contains(out, "review of i1 · 1 statement: 0 supported, 1 finding, 0 skipped · ") || strings.Count(out, ranked) != 2 {
-		t.Errorf("/review i1 --ranked printed:\n%s", out)
+	if out := flat(h.out()); !strings.Contains(out, "review of a2 · 1 statement: 0 supported, 1 finding, 0 skipped · ") || strings.Count(out, ranked) != 2 {
+		t.Errorf("/review a2 --ranked printed:\n%s", out)
 	}
 	was := calls(t, s)
-	for _, bad := range []string{"/review --rank", "/review i1 i2"} {
+	for _, bad := range []string{"/review --rank", "/review a1 a2"} {
 		h.say(bad)
-		if out := h.out(); !strings.Contains(out, "✗ /review takes [--ranked] [item]") || h.m.turn != nil {
+		if out := h.out(); !strings.Contains(out, "✗ /review takes [--ranked] [aN]") || h.m.turn != nil {
 			t.Errorf("%s was not refused:\n%s", bad, out)
 		}
 	}

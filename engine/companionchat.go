@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/lowmagic/compa-engine/internal/check"
 	"github.com/lowmagic/compa-engine/internal/companion"
 	"github.com/lowmagic/compa-engine/internal/config"
 	"github.com/lowmagic/compa-engine/internal/evidence"
@@ -106,13 +107,17 @@ func (s *Session) Analyze(ctx context.Context, on func(TalkEvent)) (TalkReply, e
 	return s.turn(ctx, companion.KindEngine, analyzeAsk, 0, on)
 }
 
-// Draft has the model write a draft for the configured intention id, in
-// the deployment's house style, and keeps it as an item: its text as the
-// engineer is shown it, the editor's correction or the model's revision
-// where the editor ran. It returns the item with the turn's reply, which
-// says what the check made of it; a turn cancelled once the model has
-// answered keeps no item, its reply holding the answer as shown.
-func (s *Session) Draft(ctx context.Context, id string, on func(TalkEvent)) (CompanionItem, TalkReply, error) {
+// Draft has the model write a draft for the configured intention mode in
+// spec (optionally followed by free-text steering instructions), in the
+// deployment's house style, and keeps it as an item: its text with [eN]
+// citations stripped outside fenced blocks and inline code, from the
+// editor's correction or the model's revision where the editor ran. It
+// returns the item with the turn's reply, whose Text retains [eN:lines]
+// citations so citation and deterministic checks run on it; a turn
+// cancelled once the model has answered keeps no item, its reply holding
+// the answer as shown.
+func (s *Session) Draft(ctx context.Context, spec string, on func(TalkEvent)) (CompanionItem, TalkReply, error) {
+	id, extra := splitDraftSpec(spec)
 	in, ok := s.intentionByID(id)
 	if !ok {
 		var ids []string
@@ -121,15 +126,23 @@ func (s *Session) Draft(ctx context.Context, id string, on func(TalkEvent)) (Com
 		}
 		return CompanionItem{}, TalkReply{}, fmt.Errorf("no intention %q; the intentions are %s", id, strings.Join(ids, ", "))
 	}
-	reply, err := s.turn(ctx, companion.KindEngine, draftWords(in, s.SupportName()), 0, on)
+	reply, err := s.turn(ctx, companion.KindEngine, draftWords(in, extra, s.SupportName()), 0, on)
 	if err != nil {
 		return CompanionItem{}, reply, err
 	}
 	it, err := companion.Store{DB: s.c.st.DB()}.AddItem(ctx, CompanionItem{
 		Kind: ItemDraft, Conversation: reply.Conversation, Intention: in.ID, Audience: in.Audience,
-		Text: reply.Text, CreatedAt: s.c.now(),
+		Text: StripDraftCites(reply.Text), CreatedAt: s.c.now(),
 	})
 	return it, reply, err
+}
+
+func splitDraftSpec(spec string) (id, extra string) {
+	spec = strings.TrimSpace(spec)
+	if at := strings.IndexAny(spec, " \t\r\n"); at >= 0 {
+		return spec[:at], strings.TrimSpace(spec[at:])
+	}
+	return spec, ""
 }
 
 func (s *Session) intentionByID(id string) (config.Intention, bool) {
@@ -141,16 +154,20 @@ func (s *Session) intentionByID(id string) (config.Intention, bool) {
 	return config.Intention{}, false
 }
 
-// draftWords is the engine's words for a draft: the intention, for whom, and
-// what it is for; the house style is in the system prompt. A draft the
-// customer will read carries the certainty review it is held to
-// (companion.CustomerDraft); an internal note does not.
-func draftWords(in config.Intention, supportName string) string {
+// draftWords is the engine's words for a draft: the intention, for whom,
+// what it is for, and any free-text steering from the engineer; the house
+// style is in the system prompt. A draft the customer will read carries the
+// certainty review it is held to (companion.CustomerDraft); an internal
+// note does not.
+func draftWords(in config.Intention, extra, supportName string) string {
 	audience := "the customer, as a case comment"
 	if in.Audience == "internal" {
 		audience = supportName + " only, as an internal note"
 	}
 	words := fmt.Sprintf(draftLead+"%s (%s), for %s: %s Write it from this conversation, in the house style, ready to post: only the text, no preamble.", in.Label, in.ID, audience, in.Purpose)
+	if extra != "" {
+		words += "\n\nEngineer's instructions for this draft: " + extra
+	}
 	if in.Audience == "internal" {
 		return words
 	}
@@ -158,10 +175,14 @@ func draftWords(in config.Intention, supportName string) string {
 }
 
 // SupportName is the configured name of the support organization.
-func (s *CaseStore) SupportName() string { return s.e.config.SupportName() }
+func (s *CaseStore) SupportName() string {
+	return strings.Join(strings.Fields(s.e.config.SupportName()), " ")
+}
 
 // SupportRole is what the deployment calls a support author as a person.
-func (s *CaseStore) SupportRole() string { return s.e.config.SupportRole() }
+func (s *CaseStore) SupportRole() string {
+	return strings.Join(strings.Fields(s.e.config.SupportRole()), " ")
+}
 
 // Pin keeps the conversation's last answer as an item.
 func (s *Session) Pin(ctx context.Context) (CompanionItem, error) {
@@ -372,10 +393,112 @@ var (
 	// evidenceCite is a bracket of names, each an evidence name with its
 	// lines and any bare lines after it, or a ledger item's ID. A range
 	// accepts a hyphen or the typographic en dash models also write.
-	evidenceCite = regexp.MustCompile(`\[(?:e\d+(?::\d+(?:[-–]\d+)?)?(?:,\s*\d+(?:[-–]\d+)?)*|l\d+)(?:,\s*(?:e\d+(?::\d+(?:[-–]\d+)?)?(?:,\s*\d+(?:[-–]\d+)?)*|l\d+))*\]`)
-	pathCite     = regexp.MustCompile("`?((?:[A-Za-z0-9_.@+-]+/)+[A-Za-z0-9_.@+-]+):(\\d+)(?:[-–](\\d+))?`?")
-	nameWord     = regexp.MustCompile(`\be\d+\b`)
+	evidenceCite     = regexp.MustCompile(`\[(?:e\d+(?::\d+(?:[-–]\d+)?)?(?:,\s*\d+(?:[-–]\d+)?)*|l\d+)(?:,\s*(?:e\d+(?::\d+(?:[-–]\d+)?)?(?:,\s*\d+(?:[-–]\d+)?)*|l\d+))*\]`)
+	draftCiteCluster = regexp.MustCompile(`\(\s*` + evidenceCite.String() + `(?:\s*,\s*` + evidenceCite.String() + `)*\s*\)|` + evidenceCite.String() + `(?:\s*,?\s*` + evidenceCite.String() + `)*`)
+	pathCite         = regexp.MustCompile("`?((?:[A-Za-z0-9_.@+-]+/)+[A-Za-z0-9_.@+-]+):(\\d+)(?:[-–](\\d+))?`?")
+	nameWord         = regexp.MustCompile(`\be\d+\b`)
 )
+
+// StripDraftCites removes [eN] and [lN] citation brackets (and parentheses
+// holding only such brackets) outside fenced code blocks and inline code
+// spans so a comment draft is ready to post while its stored message
+// retains exact citations for the editor, reviewer and ranked evidence.
+func StripDraftCites(text string) string {
+	lines := strings.Split(text, "\n")
+	fenced := check.Fenced(lines)
+	for i, line := range lines {
+		if !fenced[i] {
+			lines[i] = stripLineCites(line)
+		}
+	}
+	return strings.Join(lines, "\n")
+}
+
+func stripLineCites(line string) string {
+	pos := 0
+	for pos < len(line) {
+		loc := draftCiteCluster.FindStringIndex(line[pos:])
+		if loc == nil {
+			break
+		}
+		start, end := pos+loc[0], pos+loc[1]
+		codes := inlineCodeRanges(line)
+		overlaps := false
+		for _, c := range codes {
+			if start < c[1] && end > c[0] {
+				pos = c[1]
+				overlaps = true
+				break
+			}
+		}
+		if overlaps {
+			continue
+		}
+		if line[end-1] == ']' && end < len(line) && line[end] == '(' {
+			prev := strings.LastIndexByte(line[start:end-1], ']')
+			if prev < 0 {
+				pos = end
+				continue
+			}
+			end = start + prev + 1
+		}
+		left, right := line[:start], line[end:]
+		right = strings.TrimLeft(right, " \t")
+		if strings.TrimLeft(left, " \t") == "" {
+			if right == "" {
+				return ""
+			}
+			line = left + right
+			pos = len(left)
+			continue
+		}
+		left = strings.TrimRight(left, " \t")
+		sep := " "
+		if right == "" || strings.ContainsRune(".,;:!?)]", rune(right[0])) || strings.ContainsRune("([", rune(left[len(left)-1])) {
+			sep = ""
+		}
+		line = left + sep + right
+		pos = len(left) + len(sep)
+	}
+	return line
+}
+
+func inlineCodeRanges(line string) [][2]int {
+	var out [][2]int
+	for i := 0; i < len(line); {
+		if line[i] != '`' {
+			i++
+			continue
+		}
+		n := 1
+		for i+n < len(line) && line[i+n] == '`' {
+			n++
+		}
+		closed := -1
+		for j := i + n; j < len(line); {
+			if line[j] != '`' {
+				j++
+				continue
+			}
+			m := 1
+			for j+m < len(line) && line[j+m] == '`' {
+				m++
+			}
+			if m == n {
+				closed = j + m
+				break
+			}
+			j += m
+		}
+		if closed >= 0 {
+			out = append(out, [2]int{i, closed})
+			i = closed
+			continue
+		}
+		i += n
+	}
+	return out
+}
 
 // Cites are the places an answer cites, in order: [e12:41-58],
 // [e12:41], [e12:2-3, 7], [e12] and [e1, e4], case-ledger items among

@@ -8,48 +8,53 @@ kind: Config
 comments:
   style: >-
     Write as the support engineer working the case: plain, direct and
-    courteous, in short paragraphs. Say what was observed and what is still
-    open. State no cause as found except as its source's conclusion,
-    attributed; a causal relationship worth exploring is a possibility, with
-    the data that would test it. Quote the lines an observation rests on in a
+    courteous, in short paragraphs, with restrained Markdown (### headings
+    where sections help, - for unordered lists, 1. for ordered steps, never
+    bolding list lead-ins or field names, **bold** only for a rare critical
+    warning). Say what was observed, naming the real file, command or comment
+    so a reader outside compa knows where it came from, while still citing
+    [eN:lines] in prose so the engine can check them before stripping them
+    from the comment. Quote the lines an observation rests on inline in a
     fenced code block, exactly as they are. Put each command in its own
-    fenced code block, exactly as it is to be run, and say what it collects;
-    give only commands that read, never ones that change a system. Ask for
-    exactly what is needed and why. Do not mention internal tools, models or
-    this analysis.
+    inline fenced code block, exactly as it is to be run, and say what it
+    collects; give only commands that read, never ones that change a system.
+    State no cause as found except as its source's conclusion, attributed; a
+    causal relationship worth exploring is a possibility, with the data that
+    would test it. Ask for exactly what is needed and why. Do not mention
+    internal tools, models or this analysis.
   intentions:
-    - id: internal-observations
-      label: Internal observations
-      audience: internal
-      purpose: >-
-        Observations for the engineer to review, not conclusions: the problem
-        in one line; then each observation in a sentence or two, with the
-        lines it rests on quoted in a fenced code block under the item's name
-        and lines; then the open questions and causal leads worth exploring,
-        each with the data that would settle or test it and how to collect
-        it. States no cause as found and ranks no explanation.
-    - id: internal-note
+    - id: internal
       label: Internal note
       audience: internal
       purpose: >-
-        The case so far for a colleague taking it over: the problem in brief;
-        what is observed, with the evidence for each; what is attributed, and
-        to whom; what a check ruled out, and how far it reached; the open
-        questions and causal leads, each with the data that would settle or
-        test it; and what is awaited from whom. States no cause as found and
-        no leading explanation.
-    - id: request-data
-      label: Request data
+        Observations, open questions and case state for support engineers
+        (working notes, handoff or collaboration): the problem in brief; what
+        is observed, naming the real file or command and quoting the lines it
+        rests on inline in a fenced code block; what is attributed, and to
+        whom; what a check ruled out, and how far it reached; the open
+        questions and causal leads worth exploring, each with the data that
+        would settle or test it and how to collect it; and what is awaited
+        from whom. States no cause as found and ranks no explanation.
+    - id: update
+      label: Customer update
       audience: customer
       purpose: >-
-        Ask for exactly what the open questions need: each read-only command
-        or capture, where to run it and how to attach the result, with the
-        question each answers.
-    - id: status-update
-      label: Status update
-      audience: customer
+        Update the customer on where the investigation stands and ask for any
+        data still needed: what has been looked at and observed since support
+        last wrote, quoting relevant lines inline in fenced code blocks where
+        helpful; what is being checked next; and each read-only command or
+        capture needed from them, in an inline fenced code block, with where
+        to run it, how to attach the result, and the question it answers.
+        States no cause as found.
+    - id: kcs
+      label: KCS draft
+      audience: internal
       purpose: >-
-        Tell the customer where the investigation stands: what has been
-        looked at and observed since support last wrote, what is being
-        looked at next, and anything still needed from them. States no cause
-        as found.
+        A reusable knowledge-base article draft from what is observed on the
+        case so far, with no customer-specific names, hostnames or
+        identifiers: Issue (observed symptoms and inline fenced error
+        excerpts), Environment (product and component versions), Diagnostic
+        Steps (read-only commands and checks in inline fenced code blocks
+        showing how to verify the condition), and Open Investigation (what
+        remains unverified or attributed, without stating an unestablished
+        root cause or remediation).

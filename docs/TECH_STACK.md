@@ -6,7 +6,7 @@ Technology marked open remains open. Each pinned version was the newest release 
 |---|---|---|
 | Main application | Go 1.26, module `github.com/lowmagic/compa-engine` | Streaming large artifacts, concurrency, memory predictability; a deployment's binary is one static binary |
 | Chat UI | Bubble Tea inline mode + Lip Gloss + Bubbles, the v2 line under `charm.land`: `bubbletea/v2` v2.0.10, `lipgloss/v2` v2.0.6, `bubbles/v2` v2.2.1; Markdown rendered by a small renderer over Lip Gloss, no new dependency | Prints into the terminal's own scrollback, so its search and copy work; reusable input controls |
-| Shell | `!<command>` from the chat and `compa in` ingestion; proposed later: embedded PTY (`creack/pty` or equivalent), optional tmux adapter | Works inside and outside tmux |
+| Shell | `!` from the chat opening the engineer's shell, and `compa in` ingestion, over an owner-only Unix socket to the chat holding the case; proposed later: embedded PTY (`creack/pty` or equivalent), optional tmux adapter | Works inside and outside tmux |
 | Database | SQLite with WAL, through `modernc.org/sqlite` v1.60.1 | Transactional local case state, conversations, evidence index; a pure-Go driver with FTS5 built in keeps a deployment's binary one static binary with no cgo |
 | Compression | zstd through `github.com/klauspost/compress/zstd` v1.20.1; gzip support for incoming artifacts | Storage and I/O efficiency |
 | Search | SQLite FTS5 and indexed structured queries first | Simple, deterministic retrieval before more complex search |

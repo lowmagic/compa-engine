@@ -4,15 +4,18 @@ import "charm.land/lipgloss/v2"
 
 // The chat prints into the engineer's own terminal, whose background it
 // does not know: its styles use the terminal's sixteen colours, faint and
-// bold, and paint no background of their own but the browser's marked
-// lines, so they read on a light terminal and a dark one alike.
+// restrained bold (only headings, warnings and explicit **emphasis**), and
+// paint no background of their own but the browser's marked lines, so they
+// read on a light terminal and a dark one alike.
 var (
 	plainW   = lipgloss.NewStyle()
 	faintW   = plainW.Faint(true)
-	mutedW   = plainW.Bold(true).Foreground(lipgloss.BrightBlack)
+	mutedW   = plainW.Foreground(lipgloss.BrightBlack)
+	h1W      = plainW.Bold(true).Foreground(lipgloss.Magenta)
 	headingW = plainW.Bold(true).Foreground(lipgloss.Magenta)
+	h3W      = plainW.Bold(true)
 	codeW    = plainW.Foreground(lipgloss.Cyan)
-	bulletW  = plainW.Bold(true).Foreground(lipgloss.Cyan)
+	bulletW  = plainW.Foreground(lipgloss.Cyan)
 	linkW    = plainW.Foreground(lipgloss.Blue).Underline(true)
 	citeW    = plainW.Foreground(lipgloss.Cyan).Underline(true)
 	flagW    = plainW.Bold(true).Foreground(lipgloss.Red)

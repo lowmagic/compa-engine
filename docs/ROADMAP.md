@@ -237,3 +237,119 @@ in 1, 1 and 2 calls, and one ended that answer with new lists numbered from 1. A
 cut the lists' text, counted 2, 3 and 1 numbered steps and one unnumbered item each. Before the prompt said to end
 every answer so, a short answer carried no numbered list in two runs of two, and the companion answered "1" by saying
 it had numbered nothing. It is the model's behaviour on one synthetic case: nothing in the engine reads the lists.
+
+## 16. Restrained Markdown, lettered next steps and quiet chat footers
+
+Status: done
+
+Answers render with restrained Markdown — tiered headings (`#` underlined, `##` coloured, `###` plain bold), plain `-`
+lists, child and continuation paragraphs aligned under their parent item's text, indented fenced code blocks preserving
+`#` lines with fence markers hidden, and routine `- **Label:**` bullet bolding stripped — and prompt next steps with
+capital letters (`A.`–`D.`) under `Next (enter a letter, or ask a question):` while accepting uppercase or lowercase
+replies. The empty input cues next-step letters when the latest answer offered them, bare `f` and `r` single-key
+interception is removed so ordinary messages beginning with `f` or `r` never trigger checks or paid reviews, and
+post-answer metadata collapses to a single quiet footer line.
+
+Delivers: The companion, User interface.
+
+Done when: `make check` passes; `chat.TestMarkdownRestrainedHierarchyAndNesting` verifies tiered headings, nested list
+and continuation alignment, and indented fenced `#` lines; `chat.TestInputPlaceholderTracksNextSteps` verifies the
+context-aware reply cue; and `chat.TestLeadingRTypesNormallyAfterDraft` and
+`chat.TestLeadingFTypesNormallyAndCheckOpensDraftFindings` verify normal input without single-key interception.
+
+## 17. Compact-tag case ledger without item IDs or duplicate verbs
+
+Status: done
+
+`/ledger` (`engine.RenderLedger`) renders open asks under `Awaiting customer:` and `Awaiting <Support>:`, pending
+commitments under `By <Support>:` and `By customer:`, and comment items under compact `[ask]`, `[commit]`, `[report]`
+and `[provide]` tags with trailing `(answered in c#N)` statuses — dropping `lN` IDs and per-line actor names that the
+section or comment header already gives. `ledger_update` instructs the model not to open `text` with redundant actor or
+kind verbs, and `RenderLedger` deterministically strips leading duplicate `<who> <verb>` prefixes and normalizes
+configured support whitespace on stored rows too.
+
+Delivers: The companion, User interface.
+
+Done when: `make check` passes; and `engine.TestRenderLedgerByComment` and `chat.TestLedgerCommand` verify compact-tag
+rendering on both fresh and legacy stored ledger rows.
+
+## 18. Three-mode comment drafts, optional steering and post-editor citation stripping
+
+Status: done
+
+The base comment intentions consolidate to `internal` (internal note), `update` (customer update and read-only data
+requests) and `kcs` (reusable KCS draft), each instructing restrained Markdown and inline fenced code blocks naming real
+files or commands. `Session.Draft` accepts `<mode> [intention]` so free-text steering appends while preserving the
+mode's audience and certainty rules. `[eN:lines]` citations stay through `CheckCites`, `AnswerFlags`, the editor and
+anchor revision, and remain in the stored conversation history for `/review [aN]` and ranked evidence, while
+`engine.StripDraftCites` strips them outside fenced blocks and inline code for displayed and copied drafts.
+
+Delivers: The companion, User interface.
+
+Done when: `make check` passes; `engine.TestBaseConfigUnderTheDeployment` verifies the three base modes;
+`engine.TestEditorDraftKeepsCorrection` and `engine.TestStripDraftCitesAndCustomIntention` verify steering, post-editor
+`[eN]` stripping and citation resolution on `/review a1`; and `chat.TestReviewCommand` verifies `/review a2` on a draft.
+
+## 19. Browser tabs for comments and turns, and two-key verdicts
+
+Status: done
+
+The evidence browser's four tabs are `evidence`, `comments`, `turns` and `checks`: the comments tab replaces the items
+tab and `/comments`, keeping its own list beside the evidence's; `/turns` opens the turns tab, which lists each answer
+as it was shown — drafts as `aN · draft: <mode>` with citations stripped — `o` adding the editor's steps and `w`
+showing the turn open wrapped with no line numbers so the mouse selects clean text. The checks tab takes two verdict
+keys: `y` or enter supported, `x` wrong — unsupported where no line is close and none is marked, else incorrect.
+
+Delivers: User interface.
+
+Done when: `make check` passes; `chat.TestComments`, `chat.TestBrowserTurnsAsStored`, `chat.TestEditorCorrectionShown`
+and `chat.TestChecksSummary` verify the tabs, the raw view, the pipeline toggle and the two verdict keys.
+
+## 20. Ten commands, copying by answer and a quiet reopen
+
+Status: done
+
+The chat's commands are ten: `/draft`, `/copy`, `/turns`, `/ledger`, `/evidence`, `/check`, `/review`, `/model`,
+`/compact` and `/debug`. `/copy [aN]` and `ctrl+y` copy an answer or draft as it was shown, a draft's citations taken
+out, in place of pinned items; `/debug` takes `on`, `off`, `usage`, `experts`, `load <expert>` and `ranked`, which
+replace `/usage`, `/experts`, `/load` and `/ranked`. `/compact` in a case is the summary reload, carrying the case's
+state, the ledger, the ranked evidence and the last exchange beside the handoff. A reopened case offers no panel: its
+lines say what is new and what the next message resends, and the next message goes on. `/analyze`, `/pin`, `/items`,
+`/reload` and `/catchup` leave the chat; the engine keeps them.
+
+Delivers: User interface.
+
+Done when: `make check` passes; `chat.TestDraftKeptAndCopied` verifies `/copy`, `ctrl+y` and a refused `/copy a9`;
+`chat.TestReopenIsQuiet`, `TestReopenLines` and `TestCompactInCase` verify the quiet reopen and `/compact`;
+`chat.TestDebugCommands` and `TestCompletionKeys` verify `/debug`'s arguments and the menu.
+
+## 21. Argument popovers
+
+Status: done
+
+Past a command's name and a space, the `/` list offers its arguments, filtered as typed and never printed: `/draft`'s
+modes, `/copy`'s answers newest first with the start of each, `/model`'s models then the chosen model's efforts, and
+`/debug`'s arguments. Enter runs the option chosen and tab completes it; an argument typed whole runs as typed.
+
+Delivers: User interface.
+
+Done when: `make check` passes; `chat.TestArgumentPopovers` verifies each command's options, tab and enter, and that
+no row enters the transcript; `chat.TestCompletionExactArgumentRuns` verifies an argument typed whole runs as typed.
+
+## 22. The engineer's shell and compa in beside the chat
+
+Status: done
+
+`!` opens the engineer's shell in the case's folder under a three-line banner, with `COMPA_CASE` and `COMPA_INGEST` set;
+`!<command>` is refused, saying how. While the chat holds the case it serves the store to `compa in` over an
+owner-only Unix socket, named to the shell and in the store's directory, so `compa in` reaches it from the shell or any
+other. In a compa shell `compa in ["question"] [-t tags] [-f file …]` takes the case from `COMPA_CASE`, the question
+and tags kept as the note; outside one, `compa in <case> …` is unchanged. Back from the shell the chat lists what was
+kept, and the next message names it.
+
+Delivers: The engineer's shell.
+
+Done when: `make check` passes; `engine.TestIngestServer` verifies the socket's modes, the store's pointer, ingesting
+and closing; `cli.TestParseIn` and `TestIngestIntoAHeldCase` verify both forms of `compa in` and reaching a held
+case; `chat.TestShellOpensWithCompaIn` verifies the banner, the environment, the refusal, the list and the next
+message.

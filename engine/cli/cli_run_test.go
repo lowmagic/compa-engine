@@ -578,3 +578,89 @@ func TestCaseCommentsShowAndAll(t *testing.T) {
 		t.Errorf("--show with a rule: exit %d", code)
 	}
 }
+
+// TestParseIn: compa in outside a compa shell takes the case first and the
+// files after it; inside one, the shell's case, the question as the note
+// and files with -f, unless the case is named first; -c names the case
+// the same way; -t's tags are kept in the note; the shell's socket is used
+// for the shell's case only.
+func TestParseIn(t *testing.T) {
+	for _, tt := range []struct {
+		name               string
+		args               []string
+		shellCase, socket  string
+		id, note, toSocket string
+		files              []string
+		usage              bool
+	}{
+		{name: "outside", args: []string{"00000001", "--note", "oc get co", "a.txt"}, id: "00000001", note: "oc get co", files: []string{"a.txt"}},
+		{name: "outside, no case", usage: true},
+		{name: "in a shell", args: []string{"what does this answer?", "-t", "openshift, mcp", "-f", "a.txt"}, shellCase: "00000001", socket: "/s",
+			id: "00000001", note: "what does this answer? · tags: openshift, mcp", files: []string{"a.txt"}, toSocket: "/s"},
+		{name: "in a shell, nothing said", shellCase: "00000001", socket: "/s", id: "00000001", toSocket: "/s"},
+		{name: "in a shell, the case first", args: []string{"00000001", "a.txt"}, shellCase: "00000001", socket: "/s",
+			id: "00000001", files: []string{"a.txt"}, toSocket: "/s"},
+		{name: "in a shell, two questions", args: []string{"one", "two"}, shellCase: "00000001", usage: true},
+		{name: "in a shell, another case", args: []string{"-c", "00000002", "why?"}, shellCase: "00000001", socket: "/s", id: "00000002", note: "why?"},
+		{name: "tags alone", args: []string{"-c", "00000002", "-t", "mcp"}, id: "00000002", note: "tags: mcp"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			r, err := cli.ParseIn(tt.args, tt.shellCase, tt.socket)
+			if tt.usage {
+				if !errors.Is(err, cli.ErrUsage) {
+					t.Errorf("parseIn = %+v, %v; want a usage error", r, err)
+				}
+				return
+			}
+			if err != nil || r.ID != tt.id || r.Note != tt.note || r.Socket != tt.toSocket || strings.Join(r.Files, ",") != strings.Join(tt.files, ",") {
+				t.Errorf("parseIn = %+v, %v", r, err)
+			}
+		})
+	}
+}
+
+// TestIngestIntoAHeldCase: while a session holds the case and serves its
+// store, compa in sends what it reads to it, through the socket the store
+// names or the one the engineer's shell names, and says the name the
+// chat gave it; the shell's form keeps the question and the tags as the
+// note.
+func TestIngestIntoAHeldCase(t *testing.T) {
+	e := newEnv(t)
+	e.ok("case", "open", "00000001")
+	eng, err := engine.New(engine.Options{Cases: stubcases.New(e.stub), Artifacts: localdir.New(e.cases), Home: e.home, Config: hostConfig})
+	if err != nil {
+		t.Fatal(err)
+	}
+	s, err := eng.StartSession(t.Context(), "00000001", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	srv, err := s.ServeIngest(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer srv.Close()
+
+	e.stdin = "NAME   READY\nnetwork  False\n"
+	out := e.ok("in", "00000001", "--note", "oc get co")
+	if ingestedLine.FindStringSubmatch(out) == nil || !regexp.MustCompile(`(?m)^kept as e\d+ by the chat holding the case`).MatchString(out) {
+		t.Errorf("compa in on the held case:\n%s", out)
+	}
+
+	t.Setenv("COMPA_CASE", "00000001")
+	t.Setenv("COMPA_INGEST", srv.Socket())
+	e.stdin = "machine-config  4.16.3  True\n"
+	out = e.ok("in", "what does this answer?", "-t", "openshift,mcp")
+	m := regexp.MustCompile(`(?m)^kept as (e\d+) by`).FindStringSubmatch(out)
+	if m == nil {
+		t.Fatalf("compa in in the shell:\n%s", out)
+	}
+	it, err := s.EvidenceNamed(m[1])
+	if err != nil || it.Note != "what does this answer? · tags: openshift, mcp" || string(it.Content) != e.stdin {
+		t.Errorf("%s holds %q noted %q, %v", m[1], it.Content, it.Note, err)
+	}
+	if taken := srv.Take(); len(taken) != 2 {
+		t.Errorf("the chat was given %+v", taken)
+	}
+}

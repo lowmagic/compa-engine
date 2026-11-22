@@ -47,6 +47,11 @@ func Run(ctx context.Context, s *engine.Session, o Options, in io.Reader, out io
 		}()
 		return wcancel
 	})
+	// compa in, from the engineer's shell or beside the chat, sends what
+	// it keeps to the chat, which holds the case's store.
+	if m.ingest, m.ingestErr = s.ServeIngest(ctx); m.ingest != nil {
+		defer m.ingest.Close()
+	}
 	p = tea.NewProgram(m, tea.WithContext(ctx), tea.WithInput(in), tea.WithOutput(out))
 	_, err := p.Run()
 	// Quitting cancels what still runs, a turn included, and waits for it:
@@ -82,10 +87,6 @@ type model struct {
 	menuHeight  int
 	inputHeight int
 	liveHeight  int
-	// choice is the choice panel open, nil when none; news the reopened
-	// case's news whose catch-up is offered once the reload is chosen.
-	choice *choicePanel
-	news   *engine.ReopenState
 
 	// queue holds logical output; rows holds its wrapped remainder. Only one
 	// terminal row is inserted at a time, acknowledged before the next.
@@ -109,8 +110,12 @@ type model struct {
 	turn      *turnState
 	quitArmed bool
 	quitting  bool
-	// shells are the engineer's commands running.
-	shells []string
+	// ingest serves the store to compa in, nil where it could not start,
+	// ingestErr saying why; brought is what compa in kept that the next
+	// message names.
+	ingest    *engine.IngestServer
+	ingestErr error
+	brought   []engine.IngestedItem
 
 	current engine.CompanionModel
 	// records are this run's calls; usage is the stored case/chat total.
@@ -131,47 +136,37 @@ type model struct {
 	// resuming whether the prints wait for the chat's screen to be back.
 	browser, pending *browser
 	resuming         bool
-	// sent counts what the engineer has sent, which chooses the input's
-	// tip.
-	sent int
-	// reviewOffer is the item a draft was kept as, whose review the chat
-	// offers on r after it, until the next thing is sent or the next turn
-	// begins; empty when nothing is offered.
-	reviewOffer string
-	// checkOffer is the answer whose findings the chat offers in the
-	// checks tab on f after it, as reviewOffer is offered.
-	checkOffer string
+	// hasNext says the latest answer ended with lettered Next steps, which
+	// the empty input's placeholder cues.
+	hasNext bool
 	// judged are the verdicts kept since the browser opened, which its
 	// closing sums up.
 	judged []engine.SpanVerdict
 }
 
-// hint is what the empty input always says; tips are said one at a time
-// after it, the next after each thing sent, the row cut where the
-// terminal is narrower.
-const hint = "a message, /command or !shell · alt+enter new line"
+const (
+	hintAsk  = "Ask a question, / for commands, or ! for shell · alt+enter new line"
+	hintNext = "Enter a next step (A, B, …), ask a question, / for commands, or ! for shell · alt+enter new line"
+)
 
-var tips = []string{
-	"/evidence browses what the case holds",
-	"v in the browser marks lines for your next message",
-	"/pin keeps the last answer as an item",
-	"/ledger shows the comments as the ledger reads them",
-	"ctrl+o prints the last turn's tool calls in full",
-	"/draft writes a draft for an intention",
-	"/usage shows the case's tokens and cost",
-	"ctrl+c stops a running turn",
+// placeholder is the empty input's cue, naming lettered next steps when the
+// latest answer offered them.
+func placeholder(hasNext bool) string {
+	if hasNext {
+		return hintNext
+	}
+	return hintAsk
 }
 
-// placeholder is the empty input's text after n things sent.
-func placeholder(n int) string {
-	return hint + " · " + tips[n%len(tips)]
+func (m *model) refreshPlaceholder() {
+	m.input.Placeholder = placeholder(m.hasNext)
 }
 
 func newModel(s *engine.Session, o Options, spawn spawnFunc) *model {
 	in := textarea.New()
 	in.ShowLineNumbers = false
 	in.Prompt = "› "
-	in.Placeholder = placeholder(0)
+	in.Placeholder = placeholder(false)
 	in.DynamicHeight = true
 	in.MinHeight = 1
 	in.MaxHeight = 8
@@ -192,6 +187,7 @@ func newModel(s *engine.Session, o Options, spawn spawnFunc) *model {
 	m := &model{s: s, noOpen: o.NoOpen, spawn: spawn, input: in, width: 80, height: 24,
 		println: func(s string) tea.Cmd { return tea.Println(s) }}
 	m.activity = spinner.New(spinner.WithSpinner(spinner.MiniDot), spinner.WithStyle(stateW))
+	m.completion.args = m.argOptions
 	// An error here leaves the status line without the model; the first
 	// turn says what is wrong.
 	m.current, _ = s.CompanionModel()
@@ -321,9 +317,9 @@ func (m *model) Init() tea.Cmd {
 
 func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	cmd := m.update(msg)
-	if m.browser == nil && m.pending == nil && m.menuHeight > 0 && m.choice == nil && len(m.completion.matches(m.input.Value())) == 0 &&
+	if m.browser == nil && m.pending == nil && m.menuHeight > 0 && len(m.completion.matches(m.input.Value())) == 0 &&
 		!m.printing && len(m.queue) == 0 && len(m.rows) == 0 {
-		// A blank separator gives a dismissed popover or choice panel the
+		// A blank separator gives a dismissed popover the
 		// same cursor reset as an ordinary transcript print, without
 		// printing its options; it is not kept in the transcript.
 		m.queue = append(m.queue, "")
@@ -410,8 +406,8 @@ func (m *model) update(msg tea.Msg) tea.Cmd {
 		return m.done(msg)
 	case jobDone:
 		return m.jobDone(msg)
-	case shellDone:
-		m.shellDone(msg)
+	case shellDoneMsg:
+		m.shellDone(msg.err)
 		return nil
 	case itemsMsg:
 		m.browserItems(msg)
@@ -430,10 +426,6 @@ func (m *model) update(msg tea.Msg) tea.Cmd {
 		return nil
 	}
 	if m.browser == nil {
-		if _, ok := msg.(tea.PasteMsg); ok {
-			// A paste begins a message, as a key does: the offers end.
-			m.reviewOffer, m.checkOffer = "", ""
-		}
 		var cmd tea.Cmd
 		m.input, cmd = m.input.Update(msg)
 		return cmd
@@ -443,36 +435,13 @@ func (m *model) update(msg tea.Msg) tea.Cmd {
 
 // key is a key pressed in the chat.
 func (m *model) key(k tea.KeyPressMsg) tea.Cmd {
-	if m.choice != nil && m.choiceKey(k.String()) {
-		return nil
-	}
-	// r takes the review offered, and f the findings offered in the tab,
-	// only as the first key after the answer, on an empty input with
-	// nothing else open; any other key ends both offers, so a letter of a
-	// new message is never a paid review or a check begun.
-	idle := m.turn == nil && m.choice == nil && m.input.Value() == ""
-	switch {
-	case idle && k.String() == "r" && m.reviewOffer != "":
-		item := m.reviewOffer
-		m.reviewOffer, m.checkOffer = "", ""
-		m.print(commandLine("/review " + item))
-		m.review(engine.ReviewAsk{Item: item})
-		return nil
-	case idle && k.String() == "f" && m.checkOffer != "":
-		label := m.checkOffer
-		m.reviewOffer, m.checkOffer = "", ""
-		m.print(commandLine("/check " + label))
-		m.checkFindings(label)
-		return nil
-	}
-	m.reviewOffer, m.checkOffer = "", ""
 	if value, handled, submit := m.completion.key(m.input.Value(), k.String()); handled {
 		if value != m.input.Value() {
 			m.input.SetValue(value)
 			m.input.CursorEnd()
 		}
 		if submit {
-			m.enter()
+			return m.enter()
 		}
 		return nil
 	}
@@ -489,11 +458,13 @@ func (m *model) key(k tea.KeyPressMsg) tea.Cmd {
 	case "ctrl+o":
 		m.printTools()
 		return nil
+	case "ctrl+y":
+		m.copyAnswer("")
+		return nil
 	case "esc":
 		return nil
 	case "enter":
-		m.enter()
-		return nil
+		return m.enter()
 	}
 	var cmd tea.Cmd
 	m.input, cmd = m.input.Update(k)
@@ -502,30 +473,31 @@ func (m *model) key(k tea.KeyPressMsg) tea.Cmd {
 
 // enter sends what the engineer wrote: a command, a shell command or a
 // message. What is refused stays in the input.
-func (m *model) enter() {
+func (m *model) enter() tea.Cmd {
 	line := strings.TrimSpace(m.input.Value())
 	if line == "" {
-		return
+		return nil
 	}
-	m.reviewOffer, m.checkOffer = "", ""
 	var sent bool
+	var cmd tea.Cmd
 	switch {
 	case strings.HasPrefix(line, "/"):
 		sent = m.command(line)
 	case strings.HasPrefix(line, "!"):
-		sent = m.shell(strings.TrimSpace(line[1:]))
+		sent, cmd = m.shell(strings.TrimSpace(line[1:]))
 	default:
 		sent = m.message(line)
 	}
 	if sent {
 		m.input.Reset()
-		m.sent++
-		m.input.Placeholder = placeholder(m.sent)
+		m.refreshPlaceholder()
 	}
+	return cmd
 }
 
-// message sends the engineer's words to the conversation, the lines they
-// marked in the browser said first.
+// message sends the engineer's words to the conversation, what compa in
+// kept since the last and the lines they marked in the browser said
+// first.
 func (m *model) message(line string) bool {
 	if m.turn != nil {
 		m.print(errorLine("a turn is running: wait for its answer, or ctrl+c to cancel it"))
@@ -534,6 +506,15 @@ func (m *model) message(line string) bool {
 	if len(m.marks) > 0 {
 		line = "the engineer points at " + strings.Join(m.marks, ", ") + "\n\n" + line
 		m.marks = nil
+	}
+	m.takeBrought()
+	if len(m.brought) > 0 {
+		names := make([]string, 0, len(m.brought))
+		for _, it := range m.brought {
+			names = append(names, broughtShown(it))
+		}
+		line = "the engineer kept with compa in " + strings.Join(names, "; ") + "\n\n" + line
+		m.brought = nil
 	}
 	m.print("", youLine(line))
 	s := m.s
@@ -604,12 +585,7 @@ func (m *model) View() tea.View {
 	m.inputHeight = min(max(m.inputHeight, len(input)), limit)
 	held := min(m.inputHeight-len(input), max(limit-len(footer), 0))
 	room := limit - len(footer) - held
-	var options []string
-	if m.choice != nil {
-		options = m.choice.rows(m.cols(), room)
-	} else {
-		options = m.completion.rows(m.input.Value(), m.cols(), room)
-	}
+	options := m.completion.rows(m.input.Value(), m.cols(), room)
 	m.menuHeight = min(max(m.menuHeight, len(options)), room)
 	for len(options) < m.menuHeight {
 		options = append(options, "")
@@ -678,6 +654,9 @@ func (m *model) statusLine() string {
 		parts = append(parts, activity)
 	}
 	parts = append(parts, faintW.Render(where))
+	if len(m.brought) > 0 {
+		parts = append(parts, warnW.Render("naming "+text.Plural(len(m.brought), "item")+" kept"))
+	}
 	if len(m.marks) > 0 {
 		parts = append(parts, warnW.Render("pointing at "+strings.Join(m.marks, ", ")))
 	}
@@ -714,8 +693,6 @@ func (m *model) doing() string {
 	switch {
 	case m.turn != nil:
 		return m.turn.status
-	case len(m.shells) > 0:
-		return "running $ " + m.shells[0]
 	}
 	return "waiting for you"
 }

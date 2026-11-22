@@ -175,7 +175,7 @@ func (h *harness) step() {
 		case resumeMsg:
 			h.screen = append(h.screen, "frames waited")
 			h.update(msg)
-		case printedMsg, eventMsg, stateMsg, noteMsg, ledgerCallMsg, ledgerRunningMsg, recordMsg, turnDone, jobDone, shellDone, itemsMsg, historyMsg, usageMsg, verdictMsg, spinner.TickMsg:
+		case printedMsg, eventMsg, stateMsg, noteMsg, ledgerCallMsg, ledgerRunningMsg, recordMsg, turnDone, jobDone, shellDoneMsg, itemsMsg, historyMsg, usageMsg, verdictMsg, spinner.TickMsg:
 			h.update(msg)
 		case tea.RawMsg:
 			// Bubble Tea writes it to the terminal when its loop takes it.
@@ -382,7 +382,7 @@ func TestReopenMakesNoCall(t *testing.T) {
 func TestCitationsFlagged(t *testing.T) {
 	h := start(t, session(t, "case.json"), Options{})
 	out := flat(h.out())
-	for _, want := range []string{"say [e1:2].", "[e999:2] ⚠", "[e1:100000] ⚠", "⚠ 2 findings to review · f opens the checks tab"} {
+	for _, want := range []string{"say [e1:2].", "[e999:2] ⚠", "[e1:100000] ⚠", "⚠ 2 findings · /check a1 opens them"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("the answer lacks %q:\n%s", want, out)
 		}
@@ -472,7 +472,7 @@ func TestAnswerFlagsShown(t *testing.T) {
 		h     *harness
 		lines []string
 	}{
-		{"the turn", h, []string{"⚠ 2 findings to review · f opens the checks tab", "⚠ 4 findings to review · f opens the checks tab", "⚠ 2 findings to review · f opens the checks tab"}},
+		{"the turn", h, []string{"⚠ 2 findings · /check a1 opens them", "⚠ 4 findings · /check a2 opens them", "⚠ 2 findings · /check a4 opens them"}},
 		{"the reopened chat", start(t, s, Options{NoOpen: true}), []string{"⚠ 2 findings · /check a1 opens them", "⚠ 4 findings · /check a2 opens them", "⚠ 2 findings · /check a4 opens them"}},
 	} {
 		out := run.h.out()
@@ -551,9 +551,10 @@ func TestViaLineSummarises(t *testing.T) {
 	}
 }
 
-// TestDraftKeptAndCopied: /draft lists the intentions without one, writes
-// one into an item named for the engineer, and /copy asks the terminal to
-// put that item's text on the clipboard, saying it asked.
+// TestDraftKeptAndCopied: /draft lists the modes without one and writes
+// one, its footer naming the answer to copy or review; /copy and ctrl+y
+// ask the terminal to put its text on the clipboard, saying they asked,
+// and /copy of no answer is refused naming those there are.
 func TestDraftKeptAndCopied(t *testing.T) {
 	h := start(t, session(t, "case.json"), Options{NoOpen: true})
 	h.say("/draft")
@@ -564,7 +565,7 @@ func TestDraftKeptAndCopied(t *testing.T) {
 	h.say("/draft customer-update")
 	draft := "Hello, the OVN controller on worker-1 cannot sync; we are reading its logs."
 	out := h.since(mark)
-	if !strings.Contains(out, draft) || !strings.Contains(out, "kept as i1") {
+	if !strings.Contains(out, draft) || !strings.Contains(flat(out), "/copy a1 copies it · /review a1 for a second opinion") {
 		t.Errorf("/draft printed:\n%s", out)
 	}
 	h.say("/copy")
@@ -572,20 +573,20 @@ func TestDraftKeptAndCopied(t *testing.T) {
 	if diff := cmp.Diff(want, h.teaMsgs); diff != "" {
 		t.Errorf("/copy asked of the terminal (-want +got):\n%s", diff)
 	}
-	if out := h.out(); !strings.Contains(out, "asked the terminal to copy i1") {
+	if out := h.out(); !strings.Contains(out, "asked the terminal to copy a1") {
 		t.Errorf("/copy did not say it asked:\n%s", out)
 	}
-	mark = len(h.printed)
-	h.say("/pin")
-	if out := h.since(mark); !strings.Contains(out, "the last answer kept as i2") {
-		t.Errorf("/pin after the draft:\n%s", out)
+	h.press("ctrl+y")
+	h.settle()
+	if diff := cmp.Diff(append(want, want...), h.teaMsgs); diff != "" {
+		t.Errorf("ctrl+y asked of the terminal (-want +got):\n%s", diff)
 	}
-	h.say("/copy i9")
-	if out := h.out(); !strings.Contains(out, "there is no item i9; the items are i1") {
-		t.Errorf("/copy of no item:\n%s", out)
+	h.say("/copy A9")
+	if out := h.out(); !strings.Contains(out, "there is no answer a9; the answers are a1 to a1") {
+		t.Errorf("/copy of no answer:\n%s", out)
 	}
-	if len(h.teaMsgs) != 1 {
-		t.Errorf("/copy of no item asked the terminal: %v", h.teaMsgs)
+	if len(h.teaMsgs) != 2 {
+		t.Errorf("/copy of no answer asked the terminal: %v", h.teaMsgs)
 	}
 }
 
@@ -759,41 +760,93 @@ func TestRefusedWhileRunning(t *testing.T) {
 	h := start(t, session(t, "slow.json"), Options{NoOpen: true})
 	h.typed("go slowly")
 	h.press("enter")
-	h.typed("/analyze")
+	h.typed("/compact")
 	h.press("enter")
-	if got := h.m.input.Value(); got != "/analyze" {
-		t.Errorf("the input after a refused /analyze: %q", got)
+	if got := h.m.input.Value(); got != "/compact" {
+		t.Errorf("the input after a refused /compact: %q", got)
 	}
-	h.until("the refusal printed", func() bool { return strings.Contains(h.out(), "/analyze waits for the turn running") })
+	h.until("the refusal printed", func() bool { return strings.Contains(h.out(), "/compact waits for the turn running") })
 	h.press("ctrl+c")
 	h.settle()
 }
 
-// TestShellKeptAsEvidence: !<command> runs in the engineer's shell, its
-// output printed and kept as evidence the browser lists by its command.
-func TestShellKeptAsEvidence(t *testing.T) {
+// TestShellOpensWithCompaIn: ! opens the engineer's shell in the case's
+// folder under a banner saying how to keep what it shows, COMPA_CASE
+// naming the case and COMPA_INGEST the socket the chat serves; text after
+// ! is refused, saying how. Back from the shell, what compa in kept is
+// listed, the status line says the next message names it, and it does.
+func TestShellOpensWithCompaIn(t *testing.T) {
 	t.Setenv("SHELL", "/bin/sh")
 	s := session(t, "case.json")
 	h := start(t, s, Options{NoOpen: true})
-	h.say("!printf 'synthetic one\\nsynthetic two\\n'; exit 3")
-	out := h.out()
-	m := regexp.MustCompile(`kept as (e\d+) · exit status 3`).FindStringSubmatch(out)
-	if m == nil || !strings.Contains(out, "synthetic one\nsynthetic two") {
-		t.Fatalf("the command printed:\n%s", out)
-	}
-	it, err := s.EvidenceNamed(m[1])
+	srv, err := s.ServeIngest(t.Context())
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := string(it.Content); got != "synthetic one\nsynthetic two\n" {
-		t.Errorf("%s holds %q", m[1], got)
+	t.Cleanup(func() { srv.Close() })
+	h.m.ingest = srv
+
+	h.typed("!oc get co")
+	h.press("enter")
+	if got := h.m.input.Value(); got != "!oc get co" || !strings.Contains(h.out(), `! alone opens your shell, where oc get co | compa in "what does this answer?" keeps its output`) {
+		t.Errorf("!oc get co: input %q, printed:\n%s", got, h.out())
 	}
-	if !strings.HasPrefix(it.Location, "$ printf") {
-		t.Errorf("%s is located %q", m[1], it.Location)
+
+	sub := h.m.subshellFor()
+	var term strings.Builder
+	sub.SetStdin(strings.NewReader("echo \"case=$COMPA_CASE\"\npwd\ntest -S \"$COMPA_INGEST\" && echo socket-ok\nexit\n"))
+	sub.SetStdout(&term)
+	sub.SetStderr(&term)
+	if err := sub.Run(); err != nil {
+		t.Fatal(err)
+	}
+	got := ansi.Strip(term.String())
+	root, err := filepath.EvalSymlinks(s.Store().ArtifactRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"━━ compa shell · " + s.CaseID(), `in "what does this answer?" [-t tag,tag]`, "Back to chat:   exit (or ctrl+d)",
+		"case=" + s.CaseID(), root, "socket-ok"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("the shell shows no %q:\n%s", want, got)
+		}
+	}
+
+	item, err := engine.SendIngest(t.Context(), srv.Socket(), strings.NewReader("NAME   READY\nnetwork  False\n"), "stdin", "what does this answer? · tags: openshift")
+	if err != nil {
+		t.Fatal(err)
+	}
+	mark := len(h.printed)
+	h.update(shellDoneMsg{})
+	h.settle()
+	kept := "kept " + item.Name + " (stdin, 2 lines: what does this answer? · tags: openshift)"
+	if out := flat(h.since(mark)); !strings.Contains(out, kept) || !strings.Contains(out, "back from the shell: 1 item kept, which your next message names") {
+		t.Errorf("back from the shell:\n%s", out)
+	}
+	if v := h.view(); !strings.Contains(v, "naming 1 item kept") {
+		t.Errorf("the status line does not say the item is named:\n%s", v)
+	}
+	h.m.input.Reset()
+	h.say("what does it show?")
+	history, err := s.ConversationHistory(t.Context())
+	if err != nil || len(history) == 0 {
+		t.Fatal(history, err)
+	}
+	sent := ""
+	for _, msg := range history {
+		if msg.Kind == engine.MessageEngineer {
+			sent = msg.Text
+		}
+	}
+	if !strings.HasPrefix(sent, "the engineer kept with compa in "+item.Name+" (stdin, 2 lines: ") || !strings.HasSuffix(sent, "what does it show?") {
+		t.Errorf("the message sent: %q", sent)
+	}
+	if strings.Contains(h.view(), "naming 1 item") {
+		t.Error("the status line still names the item after the message")
 	}
 }
 
-// TestDebugLines: /debug prints each model call's input, the share read
+// TestDebugLines: /debug on prints each model call's input, the share read
 // from cache, its output and its timing, from then on only.
 func TestDebugLines(t *testing.T) {
 	h := start(t, session(t, "case.json"), Options{NoOpen: true})
@@ -801,7 +854,7 @@ func TestDebugLines(t *testing.T) {
 	if strings.Contains(h.out(), "call ") {
 		t.Errorf("a call printed before /debug:\n%s", h.out())
 	}
-	h.say("/debug")
+	h.say("/debug on")
 	mark := len(h.printed)
 	h.say("which model again?")
 	if out := flat(h.since(mark)); !regexp.MustCompile(`call \S+case\.json effort high · in 100 · 0% cached · out 20 · first token \S+ · total \S+`).MatchString(out) {
@@ -809,25 +862,33 @@ func TestDebugLines(t *testing.T) {
 	}
 }
 
-// TestComments: /comments lists the case's comments newest first, and
-// /comments N opens the Nth newest, before any conversation has named
-// them.
+// TestComments: the browser's comments tab lists the case's comments
+// newest first, and enter opens the newest, before any conversation has
+// named them; tab on to the turns and back keeps each tab's list.
 func TestComments(t *testing.T) {
 	h := start(t, session(t, "case.json"), Options{NoOpen: true})
-	h.say("/comments")
+	h.say("/evidence")
+	h.press("tab")
 	v := h.view()
 	first, last := strings.Index(v, "comment c3 · support-engineer"), strings.Index(v, "comment c1 · customer")
-	if first < 0 || last < 0 || first > last {
-		t.Errorf("/comments lists:\n%s", v)
+	if first < 0 || last < 0 || first > last || !strings.Contains(v, "[comments]") {
+		t.Errorf("the comments tab lists:\n%s", v)
 	}
-	h.press("esc")
-	h.say("/comments 1")
+	h.press("enter")
 	b := h.m.browser
 	if b == nil || b.open == nil {
-		t.Fatalf("/comments 1 opened nothing:\n%s", h.out())
+		t.Fatalf("enter on the newest comment opened nothing:\n%s", h.view())
 	}
 	if body := strings.Join(b.open.lines, "\n"); !strings.Contains(body, "Requested a fresh must-gather") {
-		t.Errorf("/comments 1 opened:\n%s", body)
+		t.Errorf("enter opened:\n%s", body)
+	}
+	h.press("tab", "tab", "tab")
+	if v := h.view(); !strings.Contains(v, "[evidence]") || strings.Contains(v, "comment c3") {
+		t.Errorf("back on the evidence tab:\n%s", v)
+	}
+	h.press("tab")
+	if b.open == nil || !strings.Contains(h.view(), "Requested a fresh must-gather") {
+		t.Errorf("the comments tab lost the comment open:\n%s", h.view())
 	}
 }
 
@@ -835,7 +896,7 @@ func TestComments(t *testing.T) {
 func TestUnknownCommand(t *testing.T) {
 	h := start(t, session(t, "case.json"), Options{NoOpen: true})
 	h.say("/nonsense")
-	if out := h.out(); !strings.Contains(out, "there is no command /nonsense; the commands are /analyze") {
+	if out := h.out(); !strings.Contains(out, "there is no command /nonsense; the commands are /draft") {
 		t.Errorf("an unknown command:\n%s", out)
 	}
 }
@@ -847,13 +908,32 @@ func TestReopenLines(t *testing.T) {
 	r := engine.ReopenState{Since: at, LastCall: at, NewComments: 2, NewAttachments: []string{"0030-sosreport"}, Attachments: true,
 		CacheLifetime: 10 * time.Minute, CacheExpired: true, Estimate: 45_000, Large: true}
 	got := reopenLines(r)
-	want := []string{"since you last worked this case (2026-11-06 12:00): 2 new comments, 1 new attachment; the conversation is given them at your next message",
-		"the provider's cache has expired since the last call (2026-11-06 12:00): the next call resends the conversation, about 45,000 tokens, without it"}
+	want := []string{"since you last worked this case (2026-11-06 12:00): 2 new comments, 1 new attachment; your next message gives them to the conversation, and /ledger reads the comments",
+		"the provider's cache has expired since the last call (2026-11-06 12:00): your next message resends the conversation, about 45,000 tokens, without it; /compact goes on in a new one from the case's state and a handoff"}
 	if d := cmp.Diff(want, got); d != "" {
 		t.Errorf("the lines (-want +got):\n%s", d)
 	}
 	r = engine.ReopenState{Since: at, CacheExpired: true, Estimate: 20_000}
 	if got := reopenLines(r); len(got) != 1 || got[0] != "nothing new since you last worked this case (2026-11-06 12:00)" {
 		t.Errorf("the lines for a small conversation with nothing new: %q", got)
+	}
+}
+
+// TestShellBannerFits: the shell's banner keeps each line within the
+// width, a long folder shortened from its start, and says why compa in
+// cannot reach the chat where it cannot.
+func TestShellBannerFits(t *testing.T) {
+	dir := "/" + strings.Repeat("deep/", 40) + "case-folder"
+	got := ansi.Strip(shellBanner("compa", "00000001", dir, "", 100))
+	for _, l := range strings.Split(strings.TrimRight(got, "\r\n"), "\r\n") {
+		if n := ansi.StringWidth(l); n > 80 {
+			t.Errorf("a line %d wide: %q", n, l)
+		}
+	}
+	if !strings.Contains(got, "━━ compa shell · 00000001 · …") || !strings.Contains(got, "case-folder ━━") {
+		t.Errorf("the banner:\n%s", got)
+	}
+	if got := ansi.Strip(shellBanner("compa", "00000001", "", "no socket", 80)); !strings.Contains(got, "compa in cannot reach this chat: no socket") {
+		t.Errorf("the banner where compa in cannot reach the chat:\n%s", got)
 	}
 }

@@ -81,15 +81,14 @@ func verdictMessages(t *testing.T, s *engine.Session) []string {
 	return out
 }
 
-// openChecks takes the offer after the opening with f and waits for the
-// checks tab.
+// openChecks opens the checks tab for a1 with /check a1 and waits for it.
 func openChecks(t *testing.T, h *harness) *checksPane {
 	t.Helper()
-	h.press("f")
+	h.say("/check a1")
 	h.until("the browser opens", func() bool { return h.m.browser != nil })
 	h.settle()
 	if h.m.browser.tab != tabChecks {
-		t.Fatalf("f opened the browser on tab %d; want the checks tab:\n%s", h.m.browser.tab, h.view())
+		t.Fatalf("/check a1 opened the browser on tab %d; want the checks tab:\n%s", h.m.browser.tab, h.view())
 	}
 	return h.m.browser.checks
 }
@@ -166,7 +165,7 @@ func TestChecksTabListsEveryFlag(t *testing.T) {
 	s := spanSession(t, false)
 	h := start(t, s, Options{})
 	out := h.out()
-	if got, want := findingLines(out), []string{"⚠ 4 findings to review · f opens the checks tab"}; !slices.Equal(got, want) {
+	if got, want := findingLines(out), []string{"⚠ 4 findings · /check a1 opens them"}; !slices.Equal(got, want) {
 		t.Errorf("the opening shows the finding lines %q; want %q:\n%s", got, want, out)
 	}
 	if strings.Contains(flat(out), "in no evidence this conversation saw") {
@@ -187,7 +186,7 @@ func TestChecksTabListsEveryFlag(t *testing.T) {
 			t.Errorf("the tab shows no %q:\n%s", want, view)
 		}
 	}
-	if out := h.since(mark); out != "› /check a1" {
+	if out := strings.TrimSpace(h.since(mark)); out != "› /check a1" {
 		t.Errorf("opening the tab printed %q; want only the command", out)
 	}
 	at(t, h, sumSpan)
@@ -200,9 +199,9 @@ func TestChecksTabListsEveryFlag(t *testing.T) {
 		!strings.Contains(v, "Complaint: `"+noneSpan+"` in no evidence this conversation saw · "+unsupportedWords) {
 		t.Errorf("a value with no close line:\n%s", h.view())
 	}
-	judge(h, "u")
+	judge(h, "x")
 	if got, ok := h.m.answers[0].verdicts[noneSpan]; !ok || got.Kind != engine.VerdictUnsupported {
-		t.Errorf("u on a value with no close line kept %+v, %v", got, ok)
+		t.Errorf("x on a value with no close line kept %+v, %v; want unsupported", got, ok)
 	}
 }
 
@@ -257,21 +256,18 @@ func TestChecksContext(t *testing.T) {
 
 // TestChecksMarkThenSupported: [E4] m opens the evidence shown at the
 // closest line; v and enter mark a range, esc returns to the value, and y
-// keeps it supported resting on that range, not the closest line; i with
-// nothing marked is refused, saying why, and keeps nothing.
+// keeps it supported resting on that range, not the closest line; i and u,
+// no longer verdict keys, keep nothing.
 func TestChecksMarkThenSupported(t *testing.T) {
 	s := spanSession(t, false)
 	h := start(t, s, Options{})
 	sync := flagOf(t, h.m.answers[0], syncSpan)
 	p := openChecks(t, h)
 	at(t, h, chassisSpan)
-	h.press("i")
-	if note := h.m.browser.note; !strings.Contains(note, engine.ErrInferredUnmarked.Error()) || p.judging {
-		t.Errorf("i with nothing marked: %q, judging %v", note, p.judging)
-	}
+	h.press("i", "u")
 	h.settle()
-	if _, ok := h.m.answers[0].verdicts[chassisSpan]; ok {
-		t.Error("i with nothing marked kept a verdict")
+	if _, ok := h.m.answers[0].verdicts[chassisSpan]; ok || p.judging {
+		t.Error("i or u kept a verdict: the checks tab takes y and x only")
 	}
 	at(t, h, syncSpan)
 	h.press("m")
@@ -362,9 +358,9 @@ func TestChecksAnyItem(t *testing.T) {
 	if d := cmp.Diff(want, p.values[p.cur].marks); d != "" {
 		t.Errorf("the value's marks (-want +got):\n%s", d)
 	}
-	judge(h, "i")
-	if got := h.m.answers[0].verdicts[chassisSpan]; got.Kind != engine.VerdictInferred || places(got.Evidence) != places(want) {
-		t.Errorf("i kept %+v; want inferred from %s", got, places(want))
+	judge(h, "x")
+	if got := h.m.answers[0].verdicts[chassisSpan]; got.Kind != engine.VerdictIncorrect || places(got.Evidence) != places(want) {
+		t.Errorf("x kept %+v; want incorrect against %s", got, places(want))
 	}
 }
 
@@ -383,17 +379,17 @@ func TestChecksSummary(t *testing.T) {
 	judge(h, "y")
 	at(t, h, chassisSpan)
 	h.press("m", "v", "enter", "esc")
-	judge(h, "i")
+	judge(h, "y")
 	at(t, h, sumSpan)
 	judge(h, "x")
 	at(t, h, noneSpan)
-	judge(h, "u")
+	judge(h, "x")
 	if out := h.since(mark); out != "" || p.judging {
 		t.Errorf("judging printed %q", out)
 	}
 	h.press("esc")
 	h.settle()
-	want := "a1: 1 supported, 1 inferred, 1 incorrect, 1 unsupported; the model reads the incorrect and unsupported at its next call"
+	want := "a1: 2 supported, 1 incorrect, 1 unsupported; the model reads the incorrect and unsupported at its next call"
 	if out := flat(h.since(mark)); strings.Count(out, "a1:") != 1 || !strings.Contains(out, want) || h.m.browser != nil {
 		t.Errorf("esc printed %q; want %q once", out, want)
 	}
@@ -420,12 +416,12 @@ func TestChecksSummary(t *testing.T) {
 	}
 	checkAt(t, r, "a1")
 	view := r.view()
-	for _, want := range []string{"✓ a1 `" + syncSpan + "`", "~ a1 `" + chassisSpan + "`", "✗ a1 `" + sumSpan + "`", "⚠ a1 `" + noneSpan + "`"} {
+	for _, want := range []string{"✓ a1 `" + syncSpan + "`", "✓ a1 `" + chassisSpan + "`", "✗ a1 `" + sumSpan + "`", "⚠ a1 `" + noneSpan + "`"} {
 		if !strings.Contains(view, want) {
 			t.Errorf("the reopened tab shows no %q:\n%s", want, view)
 		}
 	}
-	for span, want := range map[string]string{syncSpan: "Verdict: ✓ supported, by the engineer against", chassisSpan: "Verdict: ~ inferred, by the engineer against",
+	for span, want := range map[string]string{syncSpan: "Verdict: ✓ supported, by the engineer against", chassisSpan: "Verdict: ✓ supported, by the engineer against",
 		sumSpan: "Verdict: ✗ incorrect, by the engineer; the model is told", noneSpan: "Verdict: ⚠ unsupported, by the engineer; the model is told"} {
 		at(t, r, span)
 		if v := flat(r.view()); !strings.Contains(v, want) {
@@ -434,30 +430,30 @@ func TestChecksSummary(t *testing.T) {
 	}
 }
 
-// TestSpanCheckOfferEndsOnOtherInput: [E4] any key but f as the first
-// ends the offer, so f in a message is a letter; after a draft, the review
-// and the checks tab are offered together, and f takes the tab, opening
-// it at the draft's value.
-func TestSpanCheckOfferEndsOnOtherInput(t *testing.T) {
+// TestLeadingFTypesNormallyAndCheckOpensDraftFindings: [E4] f on the empty
+// input after an answer with findings types into the input rather than
+// hijacking it, and /check after a draft opens the checks tab at the draft's
+// flagged value.
+func TestLeadingFTypesNormallyAndCheckOpensDraftFindings(t *testing.T) {
 	h := start(t, spanSession(t, false), Options{})
-	h.press("x", "backspace", "f")
+	h.typed("find the pod")
 	h.settle()
-	if h.m.browser != nil || h.m.pending != nil || h.m.input.Value() != "f" {
-		t.Errorf("f after another key: the input %q, the browser %v", h.m.input.Value(), h.m.browser != nil)
+	if h.m.browser != nil || h.m.pending != nil || h.m.input.Value() != "find the pod" {
+		t.Errorf("typing f-message after findings: input %q, browser %v", h.m.input.Value(), h.m.browser != nil)
 	}
 
 	d := start(t, spanSession(t, true), Options{})
-	d.press("esc")
 	mark := len(d.printed)
 	d.say("/draft customer-update")
 	out := flat(d.since(mark))
-	if offer, review := strings.Index(out, "⚠ 1 finding to review · f opens the checks tab"), strings.Index(out, "r reviews it with "); offer < 0 || review < offer ||
+	label := d.m.answers[len(d.m.answers)-1].label
+	if !strings.Contains(out, "⚠ 1 finding · /check "+label+" opens them") || strings.Contains(out, "r reviews it with") ||
 		len(findingLines(d.since(mark))) != 1 {
-		t.Fatalf("the draft's offers:\n%s", out)
+		t.Fatalf("the draft's findings line:\n%s", out)
 	}
-	p := openChecks(t, d)
-	if v := p.values[p.cur]; v.label != d.m.answers[len(d.m.answers)-1].label || v.flag.Span != "error syncing node worker-7" || d.m.turn != nil {
-		t.Errorf("f after a draft opened the tab at %+v", v)
+	p := checkAt(t, d, "")
+	if v := p.values[p.cur]; v.label != label || v.flag.Span != "error syncing node worker-7" || d.m.turn != nil {
+		t.Errorf("/check after a draft opened the tab at %+v", v)
 	}
 }
 
@@ -521,7 +517,7 @@ func TestChecksEscWhileJudging(t *testing.T) {
 	at(t, h, syncSpan)
 	judge(h, "y")
 	at(t, h, noneSpan)
-	h.press("u", "esc")
+	h.press("x", "esc")
 	h.settle()
 	if h.m.browser == nil {
 		t.Fatalf("esc while judging closed the browser:\n%s", h.since(mark))

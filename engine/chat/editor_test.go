@@ -81,6 +81,11 @@ func TestEditorCorrectionShown(t *testing.T) {
 	}
 	r := start(t, s, Options{NoOpen: true})
 	v := r.turnsTab()
+	if !strings.Contains(v, "› a1 · ") || strings.Contains(v, "corrected by the editor") {
+		t.Fatalf("the turns tab lists the editor's steps by default, or not a1 as shown:\n%s", v)
+	}
+	r.press("o")
+	v = r.view()
 	original, correction := strings.Index(v, "  a1 · "), strings.Index(v, "› a1 corrected by the editor · ")
 	if original < 0 || correction < original {
 		t.Fatalf("the turns tab:\n%s", v)
@@ -92,24 +97,23 @@ func TestEditorCorrectionShown(t *testing.T) {
 }
 
 // TestEditorAnchorShown: [E2] an answer with an anchor is printed as the
-// model revised it, one line beneath summing up the anchors it was asked
-// to fulfil, by kind, and where they are listed, f after the turn and
-// /check reopened, the anchors themselves never printed; the footer says
-// it was revised. The checks tab lists the anchor whole, for reading, live
-// and reopened. The turns tab lists the answer, the engine's ask and the
-// revision under the answer's name, and a reopened chat prints the
-// revision once.
+// model revised it, its single quiet footer saying it was revised and where
+// the anchors and original are, the anchors themselves never printed inline
+// (with /debug adding the per-kind anchor breakdown). The checks tab lists
+// the anchor whole, for reading, live and reopened. The turns tab lists the
+// answer, the engine's ask and the revision under the answer's name, and a
+// reopened chat prints the revision once.
 func TestEditorAnchorShown(t *testing.T) {
 	s := editedSession(t)
 	h := start(t, s, Options{NoOpen: true})
 	h.say("anchor please")
 	for _, run := range []struct {
-		name, how string
-		h         *harness
-	}{{"the turn", "f opens the checks tab", h}, {"the reopened chat", "/check a1 lists them", start(t, s, Options{NoOpen: true})}} {
+		name string
+		h    *harness
+	}{{"the turn", h}, {"the reopened chat", start(t, s, Options{NoOpen: true})}} {
 		out := flat(run.h.out())
-		for _, want := range []string{anchorRevised, "asked of the revision: 1 anchor, misattributed · " + run.how,
-			"· revised for 1 anchor · the original in the turns tab"} {
+		for _, want := range []string{anchorRevised,
+			"· revised for 1 anchor · /check a1 lists anchors · the original in the turns tab"} {
 			if !strings.Contains(out, want) {
 				t.Errorf("%s lacks %q:\n%s", run.name, want, out)
 			}
@@ -117,11 +121,7 @@ func TestEditorAnchorShown(t *testing.T) {
 		if strings.Count(out, "a1 ·") != 1 || strings.Contains(out, "a2 ·") || strings.Contains(out, "asked of the revision: s1") {
 			t.Errorf("%s does not print the revision once, as a1, with its anchor summed up:\n%s", run.name, out)
 		}
-		if run.h == h {
-			openChecks(t, h)
-		} else {
-			checkAt(t, run.h, "a1")
-		}
+		checkAt(t, run.h, "a1")
 		want := []string{`· s1 misattributed · "The operator restarted ovnkube-node" who saw the restart is not in the lines given`}
 		if got := tabbed(run.h, "a1"); !slices.Equal(got, want) {
 			t.Errorf("%s: the tab lists %q; want %q", run.name, got, want)
@@ -136,7 +136,10 @@ func TestEditorAnchorShown(t *testing.T) {
 		run.h.press("esc")
 		run.h.settle()
 	}
-	v := start(t, s, Options{NoOpen: true}).turnsTab()
+	r := start(t, s, Options{NoOpen: true})
+	r.turnsTab()
+	r.press("o")
+	v := r.view()
 	a1, ask, revised := strings.Index(v, "  a1 · "), strings.Index(v, "  a1 sent back for revision · "), strings.Index(v, "› a1 revised · ")
 	if a1 < 0 || ask < a1 || revised < ask {
 		t.Errorf("the turns tab:\n%s", v)
@@ -156,13 +159,13 @@ func TestAsksLineSumsUp(t *testing.T) {
 		asks = append(asks, reading{about: aboutAnchor, kind: kind})
 	}
 	a := answer{label: "a2", asks: asks}
-	if got, want := asksLine(a, true), "asked of the revision: 13 anchors: 9 misattributed, 4 unsupported · f opens the checks tab"; got != want {
-		t.Errorf("offered: %q; want %q", got, want)
+	if got, want := asksLine(a), "asked of the revision: 13 anchors: 9 misattributed, 4 unsupported · /check a2 lists them"; got != want {
+		t.Errorf("many anchors: %q; want %q", got, want)
 	}
-	if got, want := asksLine(answer{label: "a2", asks: asks[:1]}, false), "asked of the revision: 1 anchor, misattributed · /check a2 lists them"; got != want {
-		t.Errorf("reopened: %q; want %q", got, want)
+	if got, want := asksLine(answer{label: "a2", asks: asks[:1]}), "asked of the revision: 1 anchor, misattributed · /check a2 lists them"; got != want {
+		t.Errorf("one anchor: %q; want %q", got, want)
 	}
-	if got := asksLine(answer{label: "a2"}, true); got != "" {
+	if got := asksLine(answer{label: "a2"}); got != "" {
 		t.Errorf("no anchors: %q", got)
 	}
 }
@@ -182,7 +185,7 @@ func TestFindingsInChecksTab(t *testing.T) {
 	h := start(t, s, Options{NoOpen: true})
 	h.say("findings please")
 	out := h.out()
-	if got, want := findingLines(out), []string{"⚠ 5 findings to review · f opens the checks tab"}; !slices.Equal(got, want) {
+	if got, want := findingLines(out), []string{"⚠ 5 findings · /check a1 opens them"}; !slices.Equal(got, want) {
 		t.Errorf("the finding lines %q; want %q:\n%s", got, want, out)
 	}
 	for _, not := range []string{"no evidence e999", "without brackets", "in no evidence this conversation saw", "no line given holds it", "added by the revision, naming"} {
@@ -190,8 +193,8 @@ func TestFindingsInChecksTab(t *testing.T) {
 			t.Errorf("the answer is printed with %q beneath it:\n%s", not, out)
 		}
 	}
-	if !strings.Contains(flat(out), "asked of the revision: 1 anchor, misattributed · f opens the checks tab") || strings.Contains(out, "asked of the revision: s2") {
-		t.Errorf("the anchor asked is not summed up:\n%s", out)
+	if !strings.Contains(flat(out), "revised for 1 anchor") || !strings.Contains(flat(out), "/check a1 lists anchors") || strings.Contains(out, "asked of the revision: s2") {
+		t.Errorf("the anchor asked is not summed up in the footer:\n%s", out)
 	}
 	want := []string{
 		"? `no such marker 7f3a` in no evidence this conversation saw",
@@ -220,7 +223,7 @@ func TestFindingsInChecksTab(t *testing.T) {
 		}
 	}
 	refused := "a1 [e1:2-3] " + readWords
-	for _, k := range []string{"y", "i", "u", "x", "enter", "e", "d"} {
+	for _, k := range []string{"y", "x", "enter", "e", "d"} {
 		h.press(k)
 		h.settle()
 		if b := h.m.browser; b.note != refused || p.judging || p.listing {
@@ -242,7 +245,7 @@ func TestFindingsInChecksTab(t *testing.T) {
 	if len(h.m.answers[0].verdicts) > 0 || len(verdictMessages(t, s)) > 0 || h.m.browser != nil {
 		t.Errorf("a verdict was kept: %+v; the browser open %v", h.m.answers[0].verdicts, h.m.browser != nil)
 	}
-	if out := h.since(mark); out != "› /check a1" {
+	if out := strings.TrimSpace(h.since(mark)); out != "› /check a1" {
 		t.Errorf("the tab printed %q; want only the command", out)
 	}
 
@@ -283,7 +286,7 @@ func TestEditorDraftCorrected(t *testing.T) {
 	h := start(t, editedSession(t), Options{NoOpen: true})
 	h.say("/draft customer-update")
 	draft := "Hello, the OVN controller on worker-1 cannot sync; we are reading its logs."
-	if out := flat(h.out()); !strings.Contains(out, draft) || strings.Contains(out, "investigation confirms") || !strings.Contains(out, "corrected by the editor: 1 statement") || !strings.Contains(out, "kept as i1") {
+	if out := flat(h.out()); !strings.Contains(out, draft) || strings.Contains(out, "investigation confirms") || !strings.Contains(out, "corrected by the editor: 1 statement") || !strings.Contains(out, "/copy a1 copies it") {
 		t.Errorf("/draft printed:\n%s", out)
 	}
 	h.say("/copy")
@@ -319,7 +322,7 @@ func editedSessionWith(t *testing.T, editorScript string) *engine.Session {
 // as written printed with the failure and the anchor asked, the
 // revision's own text never printed, even where the model wrote some
 // before calling a tool; reopening prints the same under the same names,
-// and /pin keeps what was shown.
+// and /copy copies what was shown.
 func TestEditorRevisionNotTakenShown(t *testing.T) {
 	s := editedSession(t)
 	h := start(t, s, Options{NoOpen: true})
@@ -331,7 +334,7 @@ func TestEditorRevisionNotTakenShown(t *testing.T) {
 	for _, k := range kinds {
 		h.say(k.ask)
 	}
-	h.say("/pin")
+	h.say("/copy")
 	for _, run := range []struct {
 		name string
 		h    *harness
@@ -346,13 +349,12 @@ func TestEditorRevisionNotTakenShown(t *testing.T) {
 				t.Errorf("%s shows %q or %q other than once:\n%s", run.name, k.answer, label, out)
 			}
 		}
-		if strings.Count(out, "! the revision failed: ") != 3 || strings.Count(out, "asked of the revision: 1 anchor, misattributed") != 3 || strings.Contains(out, "a4 ·") {
+		if strings.Count(out, "! the revision failed: ") != 3 || strings.Count(out, "asked 1 anchor · /check a") != 3 || strings.Contains(out, "a4 ·") {
 			t.Errorf("%s:\n%s", run.name, out)
 		}
 	}
-	items, err := s.Items(t.Context())
-	if err != nil || len(items) != 1 || !strings.HasPrefix(items[0].Text, kinds[2].answer) {
-		t.Errorf("/pin kept %+v, %v", items, err)
+	if len(h.teaMsgs) != 1 || !strings.HasPrefix(fmt.Sprint(h.teaMsgs[0]), kinds[2].answer) {
+		t.Errorf("/copy asked of the terminal %v", h.teaMsgs)
 	}
 }
 

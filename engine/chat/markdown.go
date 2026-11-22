@@ -13,23 +13,78 @@ import (
 )
 
 // Markdown in what the engineer reads — a model's answer, a draft, a
-// handoff — is shown with its stress: bold, italics, code, headings,
-// lists, quotes and links in the theme's weights and colours, the markers
-// themselves dropped, and each line wrapped to the terminal's width, a
-// list item's and a quote's rows under their first. It is display only:
-// what models are sent is the text as stored. A small renderer of the
-// chat's own over Lip Gloss rather than glamour, whose margins and
-// wrapping would fight the scrollback's. Only * marks emphasis, never _,
-// which identifiers are full of; a * is emphasis only where it opens before
-// a word and closes after one, so ls *.log stays as it is.
+// handoff — is shown with restrained stress: tiered headings (# underlined
+// banner, ## coloured heading, ### bold subsection), rare **bold**, *italic*,
+// `code`, plain `-` and ordered lists with nested items and continuation
+// blocks aligned under their parent's text, indented or top-level fenced code
+// blocks with their fence lines dropped, quotes and links, wrapped to the
+// terminal's width. It is display only: what models are sent and what /copy
+// copies is the text as stored. Only * marks emphasis, never _, which
+// identifiers are full of; a * is emphasis only where it opens before a word
+// and closes after one, so ls *.log stays as it is.
 
 var (
-	mdHeading = regexp.MustCompile(`^(#{1,6})\s+(.+)$`)
-	mdItem    = regexp.MustCompile(`^(\s*)([-*+]|\d+[.)])\s+(\S.*)$`)
-	mdQuote   = regexp.MustCompile(`^>\s?(.*)$`)
-	mdLink    = regexp.MustCompile(`^\[([^\]\n]+)\]\(([^)\s]+)\)`)
-	mdRule    = regexp.MustCompile(`^\s{0,3}(?:-{3,}|\*{3,}|_{3,})\s*$`)
+	mdHeading  = regexp.MustCompile(`^\s{0,3}(#{1,6})\s+(.+)$`)
+	mdItem     = regexp.MustCompile(`^(\s*)([-*+]|\d+[.)]|[a-zA-Z][.)])\s+(\S.*)$`)
+	mdQuote    = regexp.MustCompile(`^>\s?(.*)$`)
+	mdLink     = regexp.MustCompile(`^\[([^\]\n]+)\]\(([^)\s]+)\)`)
+	mdRule     = regexp.MustCompile(`^\s{0,3}(?:-{3,}|\*{3,}|_{3,})\s*$`)
+	mdLeadBold = regexp.MustCompile(`^\*\*([^*\n]{1,80}?)\*\*(:)\s+(.*)$|^\*\*([^*\n]{1,80}?:)\*\*\s+(.*)$`)
+	mdNextHead = regexp.MustCompile(`(?i)^\s*(?:#{1,6}\s+|\*\*)?next(?:\s*\([^)]*\))?:\*{0,2}\s*$`)
+	mdForYou   = regexp.MustCompile(`(?i)^\s*(?:#{1,6}\s+|\*\*)?for you:\*{0,2}\s*$`)
+	mdNextItem = regexp.MustCompile(`^\s*[A-Da-d][.)]\s+\S`)
 )
+
+// hasNextSteps reports whether text contains lettered items under a Next
+// heading outside fenced code blocks.
+func hasNextSteps(text string) bool {
+	fence := ""
+	inNext := false
+	for _, raw := range strings.Split(text, "\n") {
+		trimmed := strings.TrimSpace(raw)
+		if fence != "" {
+			if closesFence(trimmed, fence) {
+				fence = ""
+			}
+			continue
+		}
+		if f := opensFence(trimmed); f != "" {
+			fence = f
+			continue
+		}
+		switch {
+		case mdNextHead.MatchString(raw):
+			inNext = true
+		case mdForYou.MatchString(raw) || mdHeading.MatchString(raw):
+			inNext = false
+		case inNext && mdNextItem.MatchString(raw):
+			return true
+		}
+	}
+	return false
+}
+
+// opensFence returns the fence prefix (at least three ` or ~) when trimmed
+// opens a fenced code block, or empty when it does not.
+func opensFence(trimmed string) string {
+	for _, ch := range []string{"`", "~"} {
+		n := len(trimmed) - len(strings.TrimLeft(trimmed, ch))
+		if n < 3 {
+			continue
+		}
+		// Per CommonMark, a backtick fence's info string holds no backticks.
+		if ch == "`" && strings.Contains(trimmed[n:], "`") {
+			continue
+		}
+		return strings.Repeat(ch, n)
+	}
+	return ""
+}
+
+// closesFence reports whether trimmed closes a block opened by fence.
+func closesFence(trimmed, fence string) bool {
+	return strings.HasPrefix(trimmed, fence) && strings.Trim(trimmed, fence[:1]) == ""
+}
 
 // citeMarks are an answer's citations by their text as written: why one
 // is flagged, or empty where it resolves.
@@ -94,23 +149,154 @@ func ledgerView(text string, width int) string {
 	return r.render(text, func(l string) bool { return strings.HasPrefix(l, "c#") })
 }
 
+// listLevel tracks one active list depth: rawIndent is the source indentation
+// of its marker, col the rendered column of its marker, and textCol the
+// rendered column where its item text (and any child list or continuation
+// paragraph) starts.
+type listLevel struct {
+	rawIndent int
+	col       int
+	textCol   int
+}
+
 // render shows text's lines, those quiet says to muted and whole, a
 // blank row before each heading that has none.
 func (r renderer) render(text string, quiet func(string) bool) string {
-	inCode := false
-	var out []string
+	var (
+		fence    string
+		fenceRaw int
+		fenceCol int
+		levels   []listLevel
+		out      []string
+	)
 	for _, l := range strings.Split(strings.ReplaceAll(text, "\t", "    "), "\n") {
-		switch {
-		case inCode:
-		case quiet != nil && quiet(l):
+		trimmed := strings.TrimSpace(l)
+		if fence != "" {
+			if closesFence(trimmed, fence) {
+				fence = ""
+				continue
+			}
+			out = append(out, r.codeLine(l, fenceRaw, fenceCol)...)
+			continue
+		}
+		if f := opensFence(trimmed); f != "" {
+			raw := leadingSpaces(l)
+			col := 2
+			switch {
+			case raw > 0 && len(levels) > 0:
+				levels = popLevelsForBody(levels, raw)
+				if len(levels) > 0 {
+					col = levels[len(levels)-1].textCol
+				} else {
+					col = raw
+				}
+			case raw > 0:
+				col = raw
+			default:
+				levels = nil
+			}
+			fence, fenceRaw, fenceCol = f, raw, col
+			continue
+		}
+		if trimmed == "" {
+			out = append(out, "")
+			continue
+		}
+		if quiet != nil && quiet(l) {
+			levels = nil
 			out = append(out, r.wrap("", "", r.inline(l, mutedW))...)
 			continue
-		case mdHeading.MatchString(l) && len(out) > 0 && out[len(out)-1] != "":
-			out = append(out, "")
 		}
-		out = append(out, r.line(l, &inCode)...)
+		if mdRule.MatchString(l) {
+			levels = nil
+			out = append(out, faintW.Render(strings.Repeat("─", max(min(r.width, 60), 3))))
+			continue
+		}
+		if m := mdHeading.FindStringSubmatch(l); m != nil {
+			levels = nil
+			if len(out) > 0 && out[len(out)-1] != "" {
+				out = append(out, "")
+			}
+			out = append(out, r.heading(len(m[1]), m[2])...)
+			continue
+		}
+		if m := mdItem.FindStringSubmatch(l); m != nil {
+			raw := len(m[1])
+			mark := m[2]
+			if mark == "-" || mark == "*" || mark == "+" {
+				mark = "-"
+			}
+			levels = pushListItem(levels, raw, len(mark)+1)
+			top := levels[len(levels)-1]
+			pad := strings.Repeat(" ", top.col)
+			hang := strings.Repeat(" ", top.textCol)
+			body := stripLeadBold(m[3])
+			out = append(out, r.wrap(pad+bulletW.Render(mark)+" ", hang, r.inline(body, plainW))...)
+			continue
+		}
+		if m := mdQuote.FindStringSubmatch(l); m != nil && strings.HasPrefix(l, ">") {
+			levels = nil
+			bar := faintW.Render("│ ")
+			out = append(out, r.wrap(bar, bar, r.inline(m[1], faintW))...)
+			continue
+		}
+		raw := leadingSpaces(l)
+		if raw > 0 && len(levels) > 0 {
+			levels = popLevelsForBody(levels, raw)
+			if len(levels) > 0 {
+				pad := strings.Repeat(" ", levels[len(levels)-1].textCol)
+				out = append(out, r.wrap(pad, pad, r.inline(trimmed, plainW))...)
+				continue
+			}
+		}
+		levels = nil
+		out = append(out, r.wrap("", "", r.inline(l, plainW))...)
 	}
 	return strings.Join(out, "\n")
+}
+
+// pushListItem updates the active list stack for an item at source indent raw
+// whose rendered marker plus trailing space occupies markWidth columns.
+func pushListItem(levels []listLevel, raw, markWidth int) []listLevel {
+	for len(levels) > 0 && levels[len(levels)-1].rawIndent > raw {
+		levels = levels[:len(levels)-1]
+	}
+	if len(levels) > 0 && levels[len(levels)-1].rawIndent == raw {
+		top := &levels[len(levels)-1]
+		top.textCol = top.col + markWidth
+		return levels
+	}
+	col := 0
+	if len(levels) > 0 {
+		col = levels[len(levels)-1].textCol
+	}
+	return append(levels, listLevel{rawIndent: raw, col: col, textCol: col + markWidth})
+}
+
+// popLevelsForBody drops list levels deeper than an indented continuation
+// paragraph or fenced block at source indent raw.
+func popLevelsForBody(levels []listLevel, raw int) []listLevel {
+	for len(levels) > 0 && raw < levels[len(levels)-1].rawIndent+2 {
+		levels = levels[:len(levels)-1]
+	}
+	return levels
+}
+
+// stripLeadBold removes routine AI-style bolding on a list item's "Label: "
+// lead-in while preserving genuine emphasis elsewhere in the item.
+func stripLeadBold(s string) string {
+	m := mdLeadBold.FindStringSubmatch(s)
+	if m == nil {
+		return s
+	}
+	if m[1] != "" {
+		return m[1] + m[2] + " " + m[3]
+	}
+	return m[4] + " " + m[5]
+}
+
+func leadingSpaces(s string) int {
+	return len(s) - len(strings.TrimLeft(s, " "))
 }
 
 // renderer shows one text's Markdown.
@@ -120,35 +306,45 @@ type renderer struct {
 	cites []string
 }
 
-// line is one line of the text shown, in as many rows as its wrapping
-// takes; inCode carries a fenced block from line to line.
-func (r renderer) line(l string, inCode *bool) []string {
-	if strings.HasPrefix(strings.TrimSpace(l), "```") {
-		*inCode = !*inCode
-		return r.hard(l, faintW)
-	}
-	if *inCode {
-		return r.hard(l, codeW)
-	}
-	if mdRule.MatchString(l) {
-		return []string{faintW.Render(strings.Repeat("─", max(min(r.width, 60), 3)))}
-	}
-	if m := mdHeading.FindStringSubmatch(l); m != nil {
-		return r.wrap("", "", r.inline(m[2], headingW))
-	}
-	if m := mdItem.FindStringSubmatch(l); m != nil {
-		mark := m[2]
-		if mark == "-" || mark == "*" || mark == "+" {
-			mark = "•"
+// heading renders a heading at tier 1 (# underlined banner), tier 2 (##
+// coloured heading) or tier 3+ (### bold default foreground).
+func (r renderer) heading(level int, body string) []string {
+	switch level {
+	case 1:
+		rows := r.wrap("", "", r.inline(body, h1W))
+		w := 0
+		for _, row := range rows {
+			w = max(w, ansi.StringWidth(row))
 		}
-		hang := strings.Repeat(" ", ansi.StringWidth(m[1]+mark+" "))
-		return r.wrap(m[1]+bulletW.Render(mark)+" ", hang, r.inline(m[3], plainW))
+		if r.width > 0 {
+			w = min(w, r.width)
+		}
+		rule := faintW.Render(strings.Repeat("─", max(w, 3)))
+		return append(rows, rule)
+	case 2:
+		return r.wrap("", "", r.inline(body, headingW))
+	default:
+		return r.wrap("", "", r.inline(body, h3W))
 	}
-	if m := mdQuote.FindStringSubmatch(l); m != nil && strings.HasPrefix(l, ">") {
-		bar := faintW.Render("│ ")
-		return r.wrap(bar, bar, r.inline(m[1], faintW))
+}
+
+// codeLine renders one line inside a fenced code block, preserving indentation
+// beyond the opening fence's source column and aligning the block at col.
+func (r renderer) codeLine(l string, fenceRaw, col int) []string {
+	if strings.TrimSpace(l) == "" {
+		return []string{""}
 	}
-	return r.wrap("", "", r.inline(l, plainW))
+	strip := min(leadingSpaces(l), fenceRaw)
+	body := l[strip:]
+	pad := strings.Repeat(" ", col)
+	if r.width <= 0 || r.width-col < minRoom {
+		return r.hard(pad+body, codeW)
+	}
+	rows := strings.Split(ansi.Hardwrap(body, r.width-col, true), "\n")
+	for i := range rows {
+		rows[i] = codeW.Render(pad + rows[i])
+	}
+	return rows
 }
 
 // minRoom is the narrowest a wrapped line's text is made; a narrower
@@ -173,8 +369,7 @@ func (r renderer) wrap(first, rest, s string) []string {
 	return rows
 }
 
-// hard cuts a line kept as written, a code block's, at the width, each
-// row in st.
+// hard cuts a line kept as written at the width, each row in st.
 func (r renderer) hard(l string, st lipgloss.Style) []string {
 	if r.width <= 0 {
 		return []string{st.Render(l)}
@@ -284,7 +479,11 @@ func (r renderer) inline(s string, plain lipgloss.Style) string {
 		case '[':
 			if m := mdLink.FindStringSubmatch(s[i:]); m != nil {
 				flush()
-				out.WriteString(linkW.Render(m[1]) + faintW.Render(" ("+m[2]+")"))
+				if m[1] == m[2] {
+					out.WriteString(linkW.Render(m[1]))
+				} else {
+					out.WriteString(linkW.Render(m[1]) + faintW.Render(" ("+m[2]+")"))
+				}
 				i += len(m[0])
 				continue
 			}
