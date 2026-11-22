@@ -122,6 +122,14 @@ func TestBrowserTurnsAsStored(t *testing.T) {
 		if v := h.view(); !strings.Contains(v, "## The case") || !strings.Contains(v, "**cannot sync**") {
 			t.Errorf("%s: the answer opened is not as stored:\n%s", c.name, v)
 		}
+		h.press("w")
+		if v := h.view(); !strings.Contains(v, "\n## The case\n") {
+			t.Errorf("%s: w does not show the turn wrapped with no numbers:\n%s", c.name, v)
+		}
+		h.press("w")
+		if v := h.view(); strings.Contains(v, "\n## The case\n") {
+			t.Errorf("%s: w again does not number the lines:\n%s", c.name, v)
+		}
 		h.teaMsgs = nil
 		h.press("y")
 		h.settle()

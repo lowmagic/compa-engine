@@ -33,11 +33,10 @@ var commandCatalog = []commandSpec{
 	{name: "check", args: "[aN]", description: "Open the checks tab at the last answer's findings, or an answer's", waitsForTurn: true},
 	{name: "load", args: "<expert>", description: "Load an expert into the conversation", waitsForTurn: true},
 	{name: "experts", description: "List installed experts"},
-	{name: "evidence", args: "[eN[:lines]]", description: "Browse evidence"},
-	{name: "comments", args: "[N]", description: "Browse case comments"},
+	{name: "evidence", args: "[eN[:lines]]", description: "Browse evidence, comments, turns and checks"},
+	{name: "turns", description: "Browse the conversation's turns, to read, select or copy one"},
 	{name: "ledger", description: "Show the case ledger, reading new comments first", waitsForTurn: true},
 	{name: "pin", description: "Keep the last answer as an item"},
-	{name: "items", description: "Browse kept answers and drafts"},
 	{name: "copy", args: "[item]", description: "Copy an item to the clipboard"},
 	{name: "model", args: "[model] [effort]", description: "Show or change the model", waitsForTurn: true, idleWithoutArgs: true},
 	{name: "compact", description: "Compact the conversation into a handoff", waitsForTurn: true},
@@ -155,12 +154,10 @@ func (m *model) command(line string) bool {
 		m.job(func(ctx context.Context) jobDone { return experts(ctx, s) })
 	case "evidence":
 		m.openEvidence(arg)
-	case "comments":
-		m.openComments(arg)
+	case "turns":
+		m.openTab(tabTurns)
 	case "ledger":
 		m.ledger()
-	case "items":
-		m.openItems()
 	case "pin":
 		m.job(func(ctx context.Context) jobDone {
 			it, err := s.Pin(ctx)

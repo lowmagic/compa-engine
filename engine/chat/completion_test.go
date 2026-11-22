@@ -13,7 +13,7 @@ func TestSlashMatches(t *testing.T) {
 		want  string
 	}{
 		{"/e", "experts,evidence"},
-		{"/co", "comments,copy,compact"},
+		{"/co", "copy,compact"},
 		{"/le", "ledger"},
 		{"/model", "model"},
 		{"/draft", "draft"},
@@ -83,8 +83,8 @@ func TestCompletionSelectionAndDismissal(t *testing.T) {
 	for range 20 {
 		c.key("/co", "down")
 	}
-	if c.selected != 2 {
-		t.Fatalf("down selected %d, want last option 2", c.selected)
+	if c.selected != 1 {
+		t.Fatalf("down selected %d, want last option 1", c.selected)
 	}
 	c.key("/co", "up")
 	if got, handled, submit := c.key("/co", "tab"); got != "/copy " || !handled || submit {

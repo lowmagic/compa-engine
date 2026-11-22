@@ -26,7 +26,7 @@ type browserTab int
 
 const (
 	tabEvidence browserTab = iota
-	tabItems
+	tabComments
 	tabTurns
 	tabChecks
 	tabCount
@@ -35,24 +35,27 @@ const (
 // browser is the browser's state.
 type browser struct {
 	tab browserTab
-	// all is the list: every named piece of evidence, newest first, or
-	// the case's comments, newest first; filter is what the engineer
-	// typed to narrow it, cur the row under the cursor.
-	all      []listed
-	comments bool
-	filter   string
-	cur      int
+	// all is the list of the tab shown, evidence or comments: every named
+	// piece of evidence, newest first, or the case's comments, newest
+	// first; filter is what the engineer typed to narrow it, cur the row
+	// under the cursor. comments says the comments' list is the one in
+	// these fields, the evidence's kept in other meanwhile, and
+	// commentsRead that the comments have been listed.
+	all          []listed
+	comments     bool
+	commentsRead bool
+	filter       string
+	cur          int
 	// open is the evidence open, nil on the list; back says esc returns
 	// to the list rather than to the chat.
-	open *opened
-	back bool
-	// items are the pinned answers and drafts, the items tab's; item the
-	// one open.
-	items   []engine.CompanionItem
-	itemCur int
-	item    *opened
-	// said are the conversation's turns, the turns tab's, oldest first;
-	// saidOpen the one open.
+	open  *opened
+	back  bool
+	other listPane
+	// history is the stored conversation, said its turns as the turns tab
+	// lists them, oldest first, pipeline whether the editor's steps are
+	// listed too; saidOpen the turn open.
+	history  []engine.ConversationMessage
+	pipeline bool
 	said     []said
 	saidCur  int
 	saidOpen *opened
@@ -67,6 +70,61 @@ type browser struct {
 	checks *checksPane
 	// note says what the last key did, or why it did nothing.
 	note string
+}
+
+// listPane is the list of the tab not shown, evidence or comments, as the
+// browser keeps it while the other tab's is in its fields.
+type listPane struct {
+	all    []listed
+	filter string
+	cur    int
+	open   *opened
+	back   bool
+}
+
+// swapLists puts the other list, evidence or comments, in the browser's
+// fields, keeping the one shown aside.
+func (b *browser) swapLists() {
+	shown := listPane{all: b.all, filter: b.filter, cur: b.cur, open: b.open, back: b.back}
+	b.all, b.filter, b.cur, b.open, b.back = b.other.all, b.other.filter, b.other.cur, b.other.open, b.other.back
+	b.other = shown
+	b.comments = !b.comments
+}
+
+// setTab shows tab t: the comments' list in the browser's fields while
+// the comments tab is shown, the evidence's otherwise, the comments
+// listed the first time their tab is.
+func (m *model) setTab(b *browser, t browserTab) {
+	if (t == tabComments) != b.comments {
+		b.swapLists()
+		if b.comments && !b.commentsRead {
+			b.commentsRead = true
+			if err := m.listComments(b); err != nil {
+				b.note = err.Error()
+			}
+		}
+	}
+	b.tab = t
+}
+
+// listComments lists the case's comments, newest first, in the browser's
+// fields. Naming a comment names it for the case, as its conversation
+// does; it changes nothing in the conversation.
+func (m *model) listComments(b *browser) error {
+	b.all = nil
+	for _, cm := range m.s.Comments() {
+		name, err := m.s.NameEvidence(cm.EvidenceID)
+		if err != nil {
+			return err
+		}
+		who := cm.AuthorName
+		if who == "" {
+			who = cm.Author
+		}
+		label := "comment " + cm.ID + " · " + who + " · " + cm.Created.UTC().Format("2006-01-02 15:04") + " · " + firstLine(cm.Body)
+		b.all = append(b.all, listed{name: name, label: label})
+	}
+	return nil
 }
 
 // listed is one row of the list.
@@ -85,28 +143,27 @@ type opened struct {
 	lines    []string
 	cur, top int
 	// col is how many columns the lines are scrolled left by, and wide
-	// the widest line's width, zero until measured.
+	// the widest line's width, zero until measured; raw shows the lines
+	// wrapped with no numbers, for selecting with the mouse.
 	col, wide int
+	raw       bool
 	// from and to are the cited lines, from 1, zero for none; anchor is
 	// where a mark began, from 1, zero for none.
 	from, to int
 	anchor   int
 }
 
-// itemsMsg is the items and the conversation's turns for the browser's
-// tabs.
+// itemsMsg is the stored conversation, for the browser's turns tab.
 type itemsMsg struct {
-	items   []engine.CompanionItem
+	history []engine.ConversationMessage
 	err     error
-	said    []said
-	saidErr error
 }
 
 // evidenceArg is /evidence's argument: a name and lines.
 var evidenceArg = regexp.MustCompile(`^(e\d+)(?::(\d+)(?:-(\d+))?)?$`)
 
-// newBrowser is the browser over the case's named evidence, its items and
-// the conversation's turns read beside it, stepping through the last
+// newBrowser is the browser over the case's named evidence, its comments
+// and the conversation's turns read beside it, stepping through the last
 // answer's citations, with the findings of the answers printed this run
 // in its checks tab.
 func (m *model) newBrowser() (*browser, error) {
@@ -123,11 +180,8 @@ func (m *model) newBrowser() (*browser, error) {
 	}
 	s := m.s
 	m.spawn(func(ctx context.Context, _ func(tea.Msg)) tea.Msg {
-		items, err := s.Items(ctx)
-		msg := itemsMsg{items: items, err: err}
-		history, herr := s.ConversationHistory(ctx)
-		msg.said, msg.saidErr = turnsOf(history), herr
-		return msg
+		history, err := s.ConversationHistory(ctx)
+		return itemsMsg{history: history, err: err}
 	})
 	return b, nil
 }
@@ -164,64 +218,15 @@ func (m *model) openEvidence(arg string) {
 	m.pending = b
 }
 
-// openComments opens the browser on the case's comments, newest first,
-// or on the nth newest.
-func (m *model) openComments(arg string) {
-	n := 0
-	if arg != "" {
-		var err error
-		if n, err = strconv.Atoi(arg); err != nil || n < 1 {
-			m.print(errorLine("/comments takes a number: /comments 1 is the newest"))
-			return
-		}
-	}
-	cms := m.s.Comments()
-	if len(cms) == 0 {
-		m.print(errorLine("the case has no comments read"))
-		return
-	}
-	if n > len(cms) {
-		m.print(errorLine(fmt.Sprintf("the case has %s", text.Plural(len(cms), "comment"))))
-		return
-	}
+// openTab opens the browser on a tab: the comments, the turns or the
+// checks, the evidence list kept for its own tab.
+func (m *model) openTab(t browserTab) {
 	b, err := m.newBrowser()
 	if err != nil {
 		m.print(errorLine(err.Error()))
 		return
 	}
-	b.all, b.comments = nil, true
-	for _, cm := range cms {
-		// Naming a comment names it for the case, as its conversation
-		// does; it changes nothing in the conversation.
-		name, err := m.s.NameEvidence(cm.EvidenceID)
-		if err != nil {
-			m.print(errorLine(err.Error()))
-			return
-		}
-		who := cm.AuthorName
-		if who == "" {
-			who = cm.Author
-		}
-		label := "comment " + cm.ID + " · " + who + " · " + cm.Created.UTC().Format("2006-01-02 15:04") + " · " + firstLine(cm.Body)
-		b.all = append(b.all, listed{name: name, label: label})
-	}
-	if n > 0 {
-		if err := b.show(m.s, b.all[n-1].name, 0, 0); err != nil {
-			m.print(errorLine(err.Error()))
-			return
-		}
-	}
-	m.pending = b
-}
-
-// openItems opens the browser on its items tab.
-func (m *model) openItems() {
-	b, err := m.newBrowser()
-	if err != nil {
-		m.print(errorLine(err.Error()))
-		return
-	}
-	b.tab = tabItems
+	m.setTab(b, t)
 	m.pending = b
 }
 
@@ -231,7 +236,10 @@ func (b *browser) show(s *engine.Session, name string, from, to int) error {
 	if err != nil {
 		return err
 	}
-	b.open, b.tab = o, tabEvidence
+	b.open = o
+	if !b.comments {
+		b.tab = tabEvidence
+	}
 	return nil
 }
 
@@ -345,6 +353,10 @@ func bytesShown(n int64) string {
 // step opens the citation d after the one shown, of the answer the
 // browser was opened from.
 func (b *browser) step(s *engine.Session, d int) {
+	if b.comments {
+		b.note = "n and p step through the answer's citations on the evidence tab"
+		return
+	}
 	if len(b.cites) == 0 {
 		b.note = "the last answer cites no evidence"
 		return
@@ -411,11 +423,9 @@ func (m *model) browserKey(k tea.KeyPressMsg) tea.Cmd {
 			return nil
 		}
 		switch {
-		case b.tab == tabItems && b.item != nil:
-			b.item = nil
 		case b.tab == tabTurns && b.saidOpen != nil:
 			b.saidOpen = nil
-		case b.tab == tabEvidence && b.open != nil && b.back:
+		case (b.tab == tabEvidence || b.tab == tabComments) && b.open != nil && b.back:
 			b.open, b.back = nil, false
 		case b.tab == tabChecks && b.checks.back():
 		default:
@@ -423,12 +433,10 @@ func (m *model) browserKey(k tea.KeyPressMsg) tea.Cmd {
 		}
 		return nil
 	case "tab":
-		b.tab = (b.tab + 1) % tabCount
+		m.setTab(b, (b.tab+1)%tabCount)
 		return nil
 	}
 	switch b.tab {
-	case tabItems:
-		return m.itemsKey(key)
 	case tabTurns:
 		return m.turnsKey(key)
 	case tabChecks:
@@ -618,100 +626,38 @@ func (b *browser) searchKey(k tea.KeyPressMsg) {
 	}
 }
 
-// itemsKey is a key on the items tab: the cursor moves, enter opens one
-// whole, y copies it.
-func (m *model) itemsKey(key string) tea.Cmd {
-	b := m.browser
-	if o := b.item; o != nil {
-		switch key {
-		case "up", "k":
-			o.cur--
-		case "down", "j":
-			o.cur++
-		case "pgup":
-			o.cur -= 20
-		case "pgdown", "space":
-			o.cur += 20
-		case "y":
-			return m.copyFromBrowser()
-		case "left", "right":
-			o.scroll(key, m.width)
-			return nil
-		}
-		o.cur = min(max(o.cur, 0), max(len(o.lines)-1, 0))
-		return nil
-	}
-	switch key {
-	case "up", "k":
-		b.itemCur--
-	case "down", "j":
-		b.itemCur++
-	case "enter":
-		if b.itemCur < len(b.items) {
-			it := b.items[b.itemCur]
-			b.item = &opened{name: it.Name(), head: []string{text.Safe(itemLabel(it))}, lines: contentLines(it.Text), top: -1}
-		}
-	case "y":
-		return m.copyFromBrowser()
-	}
-	b.itemCur = min(max(b.itemCur, 0), max(len(b.items)-1, 0))
-	return nil
-}
-
-// copyFromBrowser copies the item under the cursor, said in the browser
-// and printed once the chat has its screen back.
-func (m *model) copyFromBrowser() tea.Cmd {
-	b := m.browser
-	if b.itemCur >= len(b.items) {
-		b.note = "there are no items: /pin keeps the last answer, /draft writes a draft"
-		return nil
-	}
-	it := b.items[b.itemCur]
-	b.note = "asked the terminal to copy " + it.Name() + " to the clipboard (OSC 52)"
-	return m.copyItem(it)
-}
-
-// itemLabel is an item as the items tab lists it.
-func itemLabel(it engine.CompanionItem) string {
-	what := "pinned answer"
-	if it.Kind == engine.ItemDraft {
-		what = "draft " + it.Intention + ", " + audienceShown(it.Audience)
-	}
-	return it.Name() + " · " + what + " · " + it.CreatedAt.UTC().Format("2006-01-02 15:04") + " · " + firstLine(it.Text)
-}
-
 // browserView is the browser on the whole screen: its tabs, the list or
 // what is open, and a line of keys or what the last one did.
 func (m *model) browserView() string {
 	b := m.browser
 	w, h := max(m.width, 20), max(m.height, 6)
-	tabs := []string{"evidence", "items", "turns", "checks"}
-	if b.comments {
-		tabs[0] = "comments"
-	}
+	tabs := []string{"evidence", "comments", "turns", "checks"}
 	tabs[b.tab] = headingW.Render("[" + tabs[b.tab] + "]")
 	top := strings.Join(tabs, "  ") + faintW.Render("   tab switches · esc returns to the chat")
 	room := h - 3
 	var body []string
 	var keys string
 	switch {
-	case b.tab == tabItems && b.item != nil:
-		body = b.item.view(w, room, "")
-		keys = "↑↓ move · ←→ scroll · y copies · esc to the items"
-	case b.tab == tabItems:
-		body = b.itemRows(w, room)
-		keys = "↑↓ move · enter opens · y copies"
 	case b.tab == tabTurns && b.saidOpen != nil:
 		body = b.saidOpen.view(w, room, "")
-		keys = "↑↓ move · ←→ scroll · y copies it as stored · esc to the turns"
+		keys = "↑↓ move · ←→ scroll · w wraps it for selecting with the mouse · y copies it · esc to the turns"
+		if b.saidOpen.raw {
+			keys = "↑↓ move · w numbers the lines again · y copies it · esc to the turns"
+		}
 	case b.tab == tabTurns:
 		body = b.saidRows(w, room)
-		keys = "↑↓ move · enter opens · y copies as stored"
+		keys = "↑↓ move · enter opens · y copies · o lists the editor's steps"
+		if b.pipeline {
+			keys = "↑↓ move · enter opens · y copies · o hides the editor's steps"
+		}
 	case b.tab == tabChecks:
 		body, keys = m.checksView(w, room)
 	case b.open != nil:
 		body = b.open.view(w, room, b.query)
 		keys = "↑↓ move · ←→ scroll · v marks, enter keeps · / searches · n p the answer's citations · l the list"
+		if b.comments {
+			keys = "↑↓ move · ←→ scroll · v marks, enter keeps · / searches · l the list"
+		}
 	default:
 		body = b.listRows(m.citedBy(), w, room)
 		keys = "type to filter · ↑↓ move · enter opens"
@@ -741,8 +687,11 @@ func (m *model) browserView() string {
 func (b *browser) listRows(citedBy map[string][]string, w, room int) []string {
 	rows := b.shown()
 	if len(rows) == 0 {
-		if b.filter != "" {
+		switch {
+		case b.filter != "":
 			return []string{faintW.Render("nothing matches " + strconv.Quote(b.filter))}
+		case b.comments:
+			return []string{faintW.Render("the case has no comments read")}
 		}
 		return []string{faintW.Render("no evidence is named yet: it is named as the conversation shows it")}
 	}
@@ -768,29 +717,23 @@ func (b *browser) listRows(citedBy map[string][]string, w, room int) []string {
 	return out
 }
 
-// itemRows are the items tab's rows.
-func (b *browser) itemRows(w, room int) []string {
-	if len(b.items) == 0 {
-		return []string{faintW.Render("no items: /pin keeps the last answer, /draft writes a draft")}
-	}
-	first := max(0, min(b.itemCur-room/2, len(b.items)-room))
-	var out []string
-	for i := first; i < len(b.items) && len(out) < room; i++ {
-		row := ansi.Truncate(text.Safe(itemLabel(b.items[i])), w-2, "…")
-		if i == b.itemCur {
-			out = append(out, cursorW.Render("› "+row))
-			continue
-		}
-		out = append(out, "  "+row)
-	}
-	return out
-}
-
 // view is an open piece of evidence or item in room rows: its head, then
 // its lines under their numbers, the cursor's, the marked, the cited and
-// those holding the search shown.
+// those holding the search shown; raw, from the cursor's line on, wrapped
+// to the width with no numbers or marks, for selecting with the mouse.
 func (o *opened) view(w, room int, query string) []string {
 	out := make([]string, 0, room)
+	if o.raw {
+		for i := max(o.cur, 0); i < len(o.lines) && len(out) < room; i++ {
+			for _, part := range strings.Split(ansi.Wrap(o.lines[i], max(w, 1), ""), "\n") {
+				if len(out) >= room {
+					break
+				}
+				out = append(out, part)
+			}
+		}
+		return out
+	}
 	for _, h := range o.head {
 		// Where the item came from is shown whole, wrapped: a search's
 		// lines leave its file's name off (withoutSource), and a
@@ -858,8 +801,8 @@ func (o *opened) view(w, room int, query string) []string {
 	return out
 }
 
-// browserItems takes the items for the browser's tab, open or about to
-// open.
+// browserItems takes the stored conversation for the browser's turns tab,
+// open or about to open.
 func (m *model) browserItems(msg itemsMsg) {
 	b := m.browser
 	if b == nil {
@@ -869,15 +812,11 @@ func (m *model) browserItems(msg itemsMsg) {
 		return
 	}
 	if msg.err != nil {
-		b.note = "the items could not be read: " + msg.err.Error()
-	} else {
-		b.items = msg.items
-	}
-	if msg.saidErr != nil {
-		b.note = "the conversation's turns could not be read: " + msg.saidErr.Error()
+		b.note = "the conversation's turns could not be read: " + msg.err.Error()
 		return
 	}
-	b.said = msg.said
+	b.history = msg.history
+	b.said = turnsOf(msg.history, b.pipeline)
 	// The newest turn first under the cursor: the one most likely wanted.
 	b.saidCur = max(len(b.said)-1, 0)
 }

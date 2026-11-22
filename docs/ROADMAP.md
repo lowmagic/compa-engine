@@ -289,3 +289,18 @@ Delivers: The companion, User interface.
 Done when: `make check` passes; `engine.TestBaseConfigUnderTheDeployment` verifies the three base modes;
 `engine.TestEditorDraftKeepsCorrection` and `engine.TestStripDraftCitesAndCustomIntention` verify steering, post-editor
 `[eN]` stripping and citation resolution on `/review a1`; and `chat.TestReviewCommand` verifies `/review a2` on a draft.
+
+## 19. Browser tabs for comments and turns, and two-key verdicts
+
+Status: done
+
+The evidence browser's four tabs are `evidence`, `comments`, `turns` and `checks`: the comments tab replaces the items
+tab and `/comments`, keeping its own list beside the evidence's; `/turns` opens the turns tab, which lists each answer
+as it was shown — drafts as `aN · draft: <mode>` with citations stripped — `o` adding the editor's steps and `w`
+showing the turn open wrapped with no line numbers so the mouse selects clean text. The checks tab takes two verdict
+keys: `y` or enter supported, `x` wrong — unsupported where no line is close and none is marked, else incorrect.
+
+Delivers: User interface.
+
+Done when: `make check` passes; `chat.TestComments`, `chat.TestBrowserTurnsAsStored`, `chat.TestEditorCorrectionShown`
+and `chat.TestChecksSummary` verify the tabs, the raw view, the pipeline toggle and the two verdict keys.

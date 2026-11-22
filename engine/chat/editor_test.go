@@ -81,6 +81,11 @@ func TestEditorCorrectionShown(t *testing.T) {
 	}
 	r := start(t, s, Options{NoOpen: true})
 	v := r.turnsTab()
+	if !strings.Contains(v, "› a1 · ") || strings.Contains(v, "corrected by the editor") {
+		t.Fatalf("the turns tab lists the editor's steps by default, or not a1 as shown:\n%s", v)
+	}
+	r.press("o")
+	v = r.view()
 	original, correction := strings.Index(v, "  a1 · "), strings.Index(v, "› a1 corrected by the editor · ")
 	if original < 0 || correction < original {
 		t.Fatalf("the turns tab:\n%s", v)
@@ -131,7 +136,10 @@ func TestEditorAnchorShown(t *testing.T) {
 		run.h.press("esc")
 		run.h.settle()
 	}
-	v := start(t, s, Options{NoOpen: true}).turnsTab()
+	r := start(t, s, Options{NoOpen: true})
+	r.turnsTab()
+	r.press("o")
+	v := r.view()
 	a1, ask, revised := strings.Index(v, "  a1 · "), strings.Index(v, "  a1 sent back for revision · "), strings.Index(v, "› a1 revised · ")
 	if a1 < 0 || ask < a1 || revised < ask {
 		t.Errorf("the turns tab:\n%s", v)
@@ -215,7 +223,7 @@ func TestFindingsInChecksTab(t *testing.T) {
 		}
 	}
 	refused := "a1 [e1:2-3] " + readWords
-	for _, k := range []string{"y", "i", "u", "x", "enter", "e", "d"} {
+	for _, k := range []string{"y", "x", "enter", "e", "d"} {
 		h.press(k)
 		h.settle()
 		if b := h.m.browser; b.note != refused || p.judging || p.listing {

@@ -25,15 +25,16 @@ type said struct {
 }
 
 // turnsOf are the conversation's turns, oldest first, from its stored
-// messages: the engineer's and the model's with text, what the editor
-// made of an answer, the reviewer's reviews and the engineer's verdicts
-// the model reads. An answer, the model's text with no tool call beside
-// it, is named as the chat names it on reopening (engine.AnswerViews); the
-// editor's correction of it, the engine's ask for its revision, the
-// revision, taken or not, and what was shown after one not taken are
-// listed after it under its name, each as stored; a review by what it is
-// of, as stored.
-func turnsOf(messages []engine.ConversationMessage) []said {
+// messages: the engineer's and the model's with text, the reviewer's
+// reviews and the engineer's verdicts the model reads. An answer, the
+// model's text with no tool call beside it, is named as the chat names it
+// on reopening (engine.AnswerViews), a draft said so with its intention
+// and its citations taken out as it was shown, and listed as the engineer
+// was shown it. With pipeline, the answer as written is listed instead,
+// then under its name the editor's correction of it, the engine's ask for
+// its revision, the revision, taken or not, and what was shown after one
+// not taken, each as stored; a review by what it is of, as stored.
+func turnsOf(messages []engine.ConversationMessage, pipeline bool) []said {
 	owner := map[int]engine.AnswerView{}
 	for _, v := range engine.AnswerViews(messages) {
 		for i := v.Original; i <= v.At; i++ {
@@ -47,10 +48,25 @@ func turnsOf(messages []engine.ConversationMessage) []said {
 		}
 		s := said{label: "you", text: msg.Text, at: msg.CreatedAt}
 		v, owned := owner[i]
+		draft := ""
+		if owned && v.Draft {
+			draft = " · draft"
+			if v.DraftIntention != "" {
+				draft += ": " + v.DraftIntention
+			}
+		}
 		switch {
 		case msg.Kind == engine.MessageEngineer:
+		case owned && !pipeline:
+			if i != v.At {
+				continue
+			}
+			s.label, s.text = v.Label+draft, v.Text
+			if v.Draft {
+				s.text = engine.StripDraftCites(v.Text)
+			}
 		case owned && i == v.Original:
-			s.label = v.Label
+			s.label = v.Label + draft
 		case owned && msg.Kind == engine.MessageCorrection:
 			s.label = v.Label + " corrected by the editor"
 		case owned && msg.Kind == engine.MessageShown:
@@ -84,7 +100,8 @@ func saidLabel(s said) string {
 }
 
 // turnsKey is a key on the turns tab: the cursor moves, enter opens one
-// whole, as stored, and y copies it.
+// whole, y copies it, o lists the editor's steps or hides them; on a turn
+// open, w wraps it with no numbers, for selecting with the mouse.
 func (m *model) turnsKey(key string) tea.Cmd {
 	b := m.browser
 	if o := b.saidOpen; o != nil {
@@ -103,6 +120,8 @@ func (m *model) turnsKey(key string) tea.Cmd {
 			o.cur = len(o.lines) - 1
 		case "y":
 			return m.copySaid()
+		case "w":
+			o.raw = !o.raw
 		case "left", "right":
 			o.scroll(key, m.width)
 			return nil
@@ -111,6 +130,11 @@ func (m *model) turnsKey(key string) tea.Cmd {
 		return nil
 	}
 	switch key {
+	case "o":
+		b.pipeline = !b.pipeline
+		b.said = turnsOf(b.history, b.pipeline)
+		b.saidCur = max(len(b.said)-1, 0)
+		return nil
 	case "up", "k":
 		b.saidCur--
 	case "down", "j":
@@ -126,7 +150,7 @@ func (m *model) turnsKey(key string) tea.Cmd {
 	case "enter":
 		if b.saidCur < len(b.said) {
 			s := b.said[b.saidCur]
-			head := []string{text.Safe(s.label + " · " + s.at.UTC().Format("2006-01-02 15:04") + " · as stored, its Markdown unrendered")}
+			head := []string{text.Safe(s.label + " · " + s.at.UTC().Format("2006-01-02 15:04") + " · its Markdown unrendered")}
 			b.saidOpen = &opened{name: s.label, head: head, lines: contentLines(s.text), top: -1}
 		}
 	case "y":

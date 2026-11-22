@@ -809,25 +809,33 @@ func TestDebugLines(t *testing.T) {
 	}
 }
 
-// TestComments: /comments lists the case's comments newest first, and
-// /comments N opens the Nth newest, before any conversation has named
-// them.
+// TestComments: the browser's comments tab lists the case's comments
+// newest first, and enter opens the newest, before any conversation has
+// named them; tab on to the turns and back keeps each tab's list.
 func TestComments(t *testing.T) {
 	h := start(t, session(t, "case.json"), Options{NoOpen: true})
-	h.say("/comments")
+	h.say("/evidence")
+	h.press("tab")
 	v := h.view()
 	first, last := strings.Index(v, "comment c3 · support-engineer"), strings.Index(v, "comment c1 · customer")
-	if first < 0 || last < 0 || first > last {
-		t.Errorf("/comments lists:\n%s", v)
+	if first < 0 || last < 0 || first > last || !strings.Contains(v, "[comments]") {
+		t.Errorf("the comments tab lists:\n%s", v)
 	}
-	h.press("esc")
-	h.say("/comments 1")
+	h.press("enter")
 	b := h.m.browser
 	if b == nil || b.open == nil {
-		t.Fatalf("/comments 1 opened nothing:\n%s", h.out())
+		t.Fatalf("enter on the newest comment opened nothing:\n%s", h.view())
 	}
 	if body := strings.Join(b.open.lines, "\n"); !strings.Contains(body, "Requested a fresh must-gather") {
-		t.Errorf("/comments 1 opened:\n%s", body)
+		t.Errorf("enter opened:\n%s", body)
+	}
+	h.press("tab", "tab", "tab")
+	if v := h.view(); !strings.Contains(v, "[evidence]") || strings.Contains(v, "comment c3") {
+		t.Errorf("back on the evidence tab:\n%s", v)
+	}
+	h.press("tab")
+	if b.open == nil || !strings.Contains(h.view(), "Requested a fresh must-gather") {
+		t.Errorf("the comments tab lost the comment open:\n%s", h.view())
 	}
 }
 

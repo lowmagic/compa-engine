@@ -199,9 +199,9 @@ func TestChecksTabListsEveryFlag(t *testing.T) {
 		!strings.Contains(v, "Complaint: `"+noneSpan+"` in no evidence this conversation saw · "+unsupportedWords) {
 		t.Errorf("a value with no close line:\n%s", h.view())
 	}
-	judge(h, "u")
+	judge(h, "x")
 	if got, ok := h.m.answers[0].verdicts[noneSpan]; !ok || got.Kind != engine.VerdictUnsupported {
-		t.Errorf("u on a value with no close line kept %+v, %v", got, ok)
+		t.Errorf("x on a value with no close line kept %+v, %v; want unsupported", got, ok)
 	}
 }
 
@@ -256,21 +256,18 @@ func TestChecksContext(t *testing.T) {
 
 // TestChecksMarkThenSupported: [E4] m opens the evidence shown at the
 // closest line; v and enter mark a range, esc returns to the value, and y
-// keeps it supported resting on that range, not the closest line; i with
-// nothing marked is refused, saying why, and keeps nothing.
+// keeps it supported resting on that range, not the closest line; i and u,
+// no longer verdict keys, keep nothing.
 func TestChecksMarkThenSupported(t *testing.T) {
 	s := spanSession(t, false)
 	h := start(t, s, Options{})
 	sync := flagOf(t, h.m.answers[0], syncSpan)
 	p := openChecks(t, h)
 	at(t, h, chassisSpan)
-	h.press("i")
-	if note := h.m.browser.note; !strings.Contains(note, engine.ErrInferredUnmarked.Error()) || p.judging {
-		t.Errorf("i with nothing marked: %q, judging %v", note, p.judging)
-	}
+	h.press("i", "u")
 	h.settle()
-	if _, ok := h.m.answers[0].verdicts[chassisSpan]; ok {
-		t.Error("i with nothing marked kept a verdict")
+	if _, ok := h.m.answers[0].verdicts[chassisSpan]; ok || p.judging {
+		t.Error("i or u kept a verdict: the checks tab takes y and x only")
 	}
 	at(t, h, syncSpan)
 	h.press("m")
@@ -361,9 +358,9 @@ func TestChecksAnyItem(t *testing.T) {
 	if d := cmp.Diff(want, p.values[p.cur].marks); d != "" {
 		t.Errorf("the value's marks (-want +got):\n%s", d)
 	}
-	judge(h, "i")
-	if got := h.m.answers[0].verdicts[chassisSpan]; got.Kind != engine.VerdictInferred || places(got.Evidence) != places(want) {
-		t.Errorf("i kept %+v; want inferred from %s", got, places(want))
+	judge(h, "x")
+	if got := h.m.answers[0].verdicts[chassisSpan]; got.Kind != engine.VerdictIncorrect || places(got.Evidence) != places(want) {
+		t.Errorf("x kept %+v; want incorrect against %s", got, places(want))
 	}
 }
 
@@ -382,17 +379,17 @@ func TestChecksSummary(t *testing.T) {
 	judge(h, "y")
 	at(t, h, chassisSpan)
 	h.press("m", "v", "enter", "esc")
-	judge(h, "i")
+	judge(h, "y")
 	at(t, h, sumSpan)
 	judge(h, "x")
 	at(t, h, noneSpan)
-	judge(h, "u")
+	judge(h, "x")
 	if out := h.since(mark); out != "" || p.judging {
 		t.Errorf("judging printed %q", out)
 	}
 	h.press("esc")
 	h.settle()
-	want := "a1: 1 supported, 1 inferred, 1 incorrect, 1 unsupported; the model reads the incorrect and unsupported at its next call"
+	want := "a1: 2 supported, 1 incorrect, 1 unsupported; the model reads the incorrect and unsupported at its next call"
 	if out := flat(h.since(mark)); strings.Count(out, "a1:") != 1 || !strings.Contains(out, want) || h.m.browser != nil {
 		t.Errorf("esc printed %q; want %q once", out, want)
 	}
@@ -419,12 +416,12 @@ func TestChecksSummary(t *testing.T) {
 	}
 	checkAt(t, r, "a1")
 	view := r.view()
-	for _, want := range []string{"✓ a1 `" + syncSpan + "`", "~ a1 `" + chassisSpan + "`", "✗ a1 `" + sumSpan + "`", "⚠ a1 `" + noneSpan + "`"} {
+	for _, want := range []string{"✓ a1 `" + syncSpan + "`", "✓ a1 `" + chassisSpan + "`", "✗ a1 `" + sumSpan + "`", "⚠ a1 `" + noneSpan + "`"} {
 		if !strings.Contains(view, want) {
 			t.Errorf("the reopened tab shows no %q:\n%s", want, view)
 		}
 	}
-	for span, want := range map[string]string{syncSpan: "Verdict: ✓ supported, by the engineer against", chassisSpan: "Verdict: ~ inferred, by the engineer against",
+	for span, want := range map[string]string{syncSpan: "Verdict: ✓ supported, by the engineer against", chassisSpan: "Verdict: ✓ supported, by the engineer against",
 		sumSpan: "Verdict: ✗ incorrect, by the engineer; the model is told", noneSpan: "Verdict: ⚠ unsupported, by the engineer; the model is told"} {
 		at(t, r, span)
 		if v := flat(r.view()); !strings.Contains(v, want) {
@@ -520,7 +517,7 @@ func TestChecksEscWhileJudging(t *testing.T) {
 	at(t, h, syncSpan)
 	judge(h, "y")
 	at(t, h, noneSpan)
-	h.press("u", "esc")
+	h.press("x", "esc")
 	h.settle()
 	if h.m.browser == nil {
 		t.Fatalf("esc while judging closed the browser:\n%s", h.since(mark))

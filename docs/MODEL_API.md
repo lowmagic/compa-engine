@@ -406,8 +406,8 @@ without it.
   the answer shows it; the complaint; its verdict; and its evidence: the lines marked for it, else its verdict's, else
   its closest line, each with two lines before and five after a single line, one before and two after a range,
   numbered, the lines themselves shown as cited, as the browser shows the item (a one-file search's file name left
-  off). `y` or enter: supported. `i`: inferred, which needs lines marked, and is refused saying so where none are.
-  `u`: unsupported, resting on no lines. `x`: incorrect. `m` opens the item shown at its lines, and `e` the evidence
+  off). `y` or enter: supported. `x`: wrong — unsupported, resting on no lines, where no line is close to the value
+  and none is marked; else incorrect. A verdict kept as inferred (by an earlier chat) still reads as such. `m` opens the item shown at its lines, and `e` the evidence
   list, as the evidence tab lists it, to open any item; in either, `v` starts a mark and enter keeps it for the value,
   ranges of several items allowed up to as many as a verdict may rest on, a mark past them refused saying so, `d`
   drops the last mark, there and in the tab, and `esc` returns to the list or the same value. The lines marked are the
