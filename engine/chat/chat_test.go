@@ -918,3 +918,22 @@ func TestReopenLines(t *testing.T) {
 		t.Errorf("the lines for a small conversation with nothing new: %q", got)
 	}
 }
+
+// TestShellBannerFits: the shell's banner keeps each line within the
+// width, a long folder shortened from its start, and says why compa in
+// cannot reach the chat where it cannot.
+func TestShellBannerFits(t *testing.T) {
+	dir := "/" + strings.Repeat("deep/", 40) + "case-folder"
+	got := ansi.Strip(shellBanner("compa", "00000001", dir, "", 100))
+	for _, l := range strings.Split(strings.TrimRight(got, "\r\n"), "\r\n") {
+		if n := ansi.StringWidth(l); n > 80 {
+			t.Errorf("a line %d wide: %q", n, l)
+		}
+	}
+	if !strings.Contains(got, "━━ compa shell · 00000001 · …") || !strings.Contains(got, "case-folder ━━") {
+		t.Errorf("the banner:\n%s", got)
+	}
+	if got := ansi.Strip(shellBanner("compa", "00000001", "", "no socket", 80)); !strings.Contains(got, "compa in cannot reach this chat: no socket") {
+		t.Errorf("the banner where compa in cannot reach the chat:\n%s", got)
+	}
+}

@@ -86,7 +86,11 @@ func (m *model) subshellFor() *subshell {
 func shellBanner(name, id, dir, unreachable string, width int) string {
 	width = max(min(width, 80), 40)
 	head := "━━ compa shell · " + id
-	if dir != "" {
+	// The folder is shortened from its start to keep the line one row.
+	if room := width - len([]rune(head)) - 6; dir != "" && room > 1 {
+		if r := []rune(dir); len(r) > room {
+			dir = "…" + string(r[len(r)-room+1:])
+		}
 		head += " · " + dir
 	}
 	head += " "
