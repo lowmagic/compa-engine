@@ -28,7 +28,7 @@ func TestToolLineShowsTheQuestion(t *testing.T) {
 	if tools := toolLines(h.out()); len(tools) != 1 || !opening.MatchString(tools[0]) {
 		t.Fatalf("the opening's tool lines: %q\n%s", tools, h.out())
 	}
-	h.say("/debug")
+	h.say("/debug on")
 	mark := len(h.printed)
 	h.say("what failed?")
 	out := h.since(mark)
@@ -148,7 +148,7 @@ func TestBatchedToolLineGivesEachCallItsQuestion(t *testing.T) {
 // flagged so. Synthetic (question.json).
 func TestDebugShowsTheAnswers(t *testing.T) {
 	h := start(t, session(t, "question.json"), Options{NoOpen: true})
-	h.say("/debug")
+	h.say("/debug on")
 	mark := len(h.printed)
 	h.say("and then?")
 	out := flat(h.since(mark))

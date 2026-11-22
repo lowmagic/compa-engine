@@ -57,7 +57,7 @@ func TestLeadingRTypesNormallyAfterDraft(t *testing.T) {
 	h := start(t, s, Options{NoOpen: true})
 	h.say("fail please")
 	h.say("/draft customer-update")
-	if out := flat(h.out()); !strings.Contains(out, "kept as i1") || strings.Contains(out, "r reviews it with") {
+	if out := flat(h.out()); !strings.Contains(out, "/review a2 for a second opinion") || strings.Contains(out, "r reviews it with") {
 		t.Fatalf("/draft printed:\n%s", out)
 	}
 	was := calls(t, s)

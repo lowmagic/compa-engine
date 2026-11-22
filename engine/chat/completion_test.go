@@ -12,7 +12,7 @@ func TestSlashMatches(t *testing.T) {
 		input string
 		want  string
 	}{
-		{"/e", "experts,evidence"},
+		{"/e", "evidence"},
 		{"/co", "copy,compact"},
 		{"/le", "ledger"},
 		{"/model", "model"},
@@ -45,20 +45,21 @@ func TestCompletionKeys(t *testing.T) {
 		input, key, want string
 		handled, submit  bool
 	}{
-		{"/lo", "tab", "/load ", true, false},
+		{"/le", "tab", "/ledger", true, false},
 		{"/dr", "tab", "/draft ", true, false},
 		{"/model", "tab", "/model ", true, false},
-		{"/e", "tab", "/experts", true, false},
-		{"/ana", "tab", "/analyze", true, false},
-		{"/lo", "enter", "/load ", true, false},
+		{"/e", "tab", "/evidence ", true, false},
+		{"/tu", "tab", "/turns", true, false},
+		{"/ev", "enter", "/evidence ", true, false},
 		{"/dr", "enter", "/draft ", true, false},
 		{"/mod", "enter", "/model ", true, false},
-		{"/deb", "enter", "/debug", true, true},
-		{"/", "enter", "/analyze", true, true},
+		{"/deb", "enter", "/debug ", true, false},
+		{"/tu", "enter", "/turns", true, true},
+		{"/", "enter", "/draft ", true, false},
 		{"/draft", "enter", "/draft", false, false},
 		{"/model", "enter", "/model", false, false},
-		{"/analyze", "enter", "/analyze", false, false},
-		{"/load", "enter", "/load", false, false},
+		{"/ledger", "enter", "/ledger", false, false},
+		{"/debug", "enter", "/debug", false, false},
 		{"/unknown", "enter", "/unknown", false, false},
 		{"/model other-model", "tab", "/model other-model", false, false},
 		{"ordinary text", "tab", "ordinary text", false, false},
@@ -149,13 +150,13 @@ func TestCompletionRowsBounded(t *testing.T) {
 func TestCompletionDoesNotInvokeModel(t *testing.T) {
 	h := start(t, session(t, "case.json"), Options{NoOpen: true})
 	before, calls := flat(h.out()), len(h.m.records)
-	h.typed("/ana")
-	if v := h.view(); !strings.Contains(v, "/analyze") || !strings.Contains(v, "tab complete") {
+	h.typed("/led")
+	if v := h.view(); !strings.Contains(v, "/ledger") || !strings.Contains(v, "tab complete") {
 		t.Fatalf("no slash menu:\n%s", v)
 	}
 	h.press("tab")
 	h.settle()
-	if got := h.m.input.Value(); got != "/analyze" {
+	if got := h.m.input.Value(); got != "/ledger" {
 		t.Errorf("tab input = %q", got)
 	}
 	if h.m.turn != nil || len(h.m.records) != calls || flat(h.out()) != before {
@@ -177,7 +178,7 @@ func TestCompletionEnterWaitsForArguments(t *testing.T) {
 	}
 	h.press("backspace", "enter")
 	h.settle()
-	if !strings.Contains(h.out(), "/draft <intention>, one of:") || h.m.input.Value() != "" {
+	if !strings.Contains(h.out(), "/draft <mode> [intention], the mode one of:") || h.m.input.Value() != "" {
 		t.Fatal("exact /draft Enter did not preserve intention listing")
 	}
 	h.say("/model")
@@ -191,8 +192,8 @@ func TestCompletionEnterWaitsForArguments(t *testing.T) {
 
 func TestCompletionEnterExecutesArgumentFreeCommand(t *testing.T) {
 	h := start(t, session(t, "case.json"), Options{NoOpen: true})
-	h.say("/deb")
-	if !h.m.debug || h.m.input.Value() != "" || !strings.Contains(h.out(), "› /debug") {
+	h.say("/tu")
+	if h.m.browser == nil || h.m.browser.tab != tabTurns || h.m.input.Value() != "" || !strings.Contains(h.out(), "› /turns") {
 		t.Fatal("partial Enter did not execute the selected argument-free command")
 	}
 }
@@ -220,11 +221,11 @@ func TestPopoverClearsItsWholeRenderArea(t *testing.T) {
 	h.typed("/")
 	height := strings.Count(h.view(), "\n")
 	h.typed("e")
-	if view := h.view(); strings.Contains(view, "/analyze") || strings.Count(view, "\n") != height {
+	if view := h.view(); strings.Contains(view, "/draft") || strings.Count(view, "\n") != height {
 		t.Fatalf("filtering left rejected options or shrank the uncleared render area:\n%s", view)
 	}
 	h.press("esc")
-	if view := h.view(); strings.Contains(view, "/experts") || strings.Count(view, "\n") != height {
+	if view := h.view(); strings.Contains(view, "/evidence") || strings.Count(view, "\n") != height {
 		t.Fatalf("dismissal left options or shrank before the cursor reset:\n%s", view)
 	}
 	h.settle()
@@ -251,7 +252,7 @@ func TestInputKeepsItsRowsUntilAPrint(t *testing.T) {
 	if strings.Count(view, "\n") != height || strings.Count(view, "waiting for you") != 1 || !strings.Contains(view, "› first") {
 		t.Fatalf("the input gave up its rows before a print:\n%s", view)
 	}
-	h.say("/experts")
+	h.say("/debug experts")
 	h.settle()
 	if strings.Count(h.view(), "\n") >= height {
 		t.Errorf("the input's rows were kept after a print:\n%s", h.view())

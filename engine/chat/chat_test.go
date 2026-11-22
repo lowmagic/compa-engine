@@ -551,9 +551,10 @@ func TestViaLineSummarises(t *testing.T) {
 	}
 }
 
-// TestDraftKeptAndCopied: /draft lists the intentions without one, writes
-// one into an item named for the engineer, and /copy asks the terminal to
-// put that item's text on the clipboard, saying it asked.
+// TestDraftKeptAndCopied: /draft lists the modes without one and writes
+// one, its footer naming the answer to copy or review; /copy and ctrl+y
+// ask the terminal to put its text on the clipboard, saying they asked,
+// and /copy of no answer is refused naming those there are.
 func TestDraftKeptAndCopied(t *testing.T) {
 	h := start(t, session(t, "case.json"), Options{NoOpen: true})
 	h.say("/draft")
@@ -564,7 +565,7 @@ func TestDraftKeptAndCopied(t *testing.T) {
 	h.say("/draft customer-update")
 	draft := "Hello, the OVN controller on worker-1 cannot sync; we are reading its logs."
 	out := h.since(mark)
-	if !strings.Contains(out, draft) || !strings.Contains(out, "kept as i1") {
+	if !strings.Contains(out, draft) || !strings.Contains(flat(out), "/copy a1 copies it · /review a1 for a second opinion") {
 		t.Errorf("/draft printed:\n%s", out)
 	}
 	h.say("/copy")
@@ -572,20 +573,20 @@ func TestDraftKeptAndCopied(t *testing.T) {
 	if diff := cmp.Diff(want, h.teaMsgs); diff != "" {
 		t.Errorf("/copy asked of the terminal (-want +got):\n%s", diff)
 	}
-	if out := h.out(); !strings.Contains(out, "asked the terminal to copy i1") {
+	if out := h.out(); !strings.Contains(out, "asked the terminal to copy a1") {
 		t.Errorf("/copy did not say it asked:\n%s", out)
 	}
-	mark = len(h.printed)
-	h.say("/pin")
-	if out := h.since(mark); !strings.Contains(out, "the last answer kept as i2") {
-		t.Errorf("/pin after the draft:\n%s", out)
+	h.press("ctrl+y")
+	h.settle()
+	if diff := cmp.Diff(append(want, want...), h.teaMsgs); diff != "" {
+		t.Errorf("ctrl+y asked of the terminal (-want +got):\n%s", diff)
 	}
-	h.say("/copy i9")
-	if out := h.out(); !strings.Contains(out, "there is no item i9; the items are i1") {
-		t.Errorf("/copy of no item:\n%s", out)
+	h.say("/copy A9")
+	if out := h.out(); !strings.Contains(out, "there is no answer a9; the answers are a1 to a1") {
+		t.Errorf("/copy of no answer:\n%s", out)
 	}
-	if len(h.teaMsgs) != 1 {
-		t.Errorf("/copy of no item asked the terminal: %v", h.teaMsgs)
+	if len(h.teaMsgs) != 2 {
+		t.Errorf("/copy of no answer asked the terminal: %v", h.teaMsgs)
 	}
 }
 
@@ -759,12 +760,12 @@ func TestRefusedWhileRunning(t *testing.T) {
 	h := start(t, session(t, "slow.json"), Options{NoOpen: true})
 	h.typed("go slowly")
 	h.press("enter")
-	h.typed("/analyze")
+	h.typed("/compact")
 	h.press("enter")
-	if got := h.m.input.Value(); got != "/analyze" {
-		t.Errorf("the input after a refused /analyze: %q", got)
+	if got := h.m.input.Value(); got != "/compact" {
+		t.Errorf("the input after a refused /compact: %q", got)
 	}
-	h.until("the refusal printed", func() bool { return strings.Contains(h.out(), "/analyze waits for the turn running") })
+	h.until("the refusal printed", func() bool { return strings.Contains(h.out(), "/compact waits for the turn running") })
 	h.press("ctrl+c")
 	h.settle()
 }
@@ -793,7 +794,7 @@ func TestShellKeptAsEvidence(t *testing.T) {
 	}
 }
 
-// TestDebugLines: /debug prints each model call's input, the share read
+// TestDebugLines: /debug on prints each model call's input, the share read
 // from cache, its output and its timing, from then on only.
 func TestDebugLines(t *testing.T) {
 	h := start(t, session(t, "case.json"), Options{NoOpen: true})
@@ -801,7 +802,7 @@ func TestDebugLines(t *testing.T) {
 	if strings.Contains(h.out(), "call ") {
 		t.Errorf("a call printed before /debug:\n%s", h.out())
 	}
-	h.say("/debug")
+	h.say("/debug on")
 	mark := len(h.printed)
 	h.say("which model again?")
 	if out := flat(h.since(mark)); !regexp.MustCompile(`call \S+case\.json effort high · in 100 · 0% cached · out 20 · first token \S+ · total \S+`).MatchString(out) {
@@ -843,7 +844,7 @@ func TestComments(t *testing.T) {
 func TestUnknownCommand(t *testing.T) {
 	h := start(t, session(t, "case.json"), Options{NoOpen: true})
 	h.say("/nonsense")
-	if out := h.out(); !strings.Contains(out, "there is no command /nonsense; the commands are /analyze") {
+	if out := h.out(); !strings.Contains(out, "there is no command /nonsense; the commands are /draft") {
 		t.Errorf("an unknown command:\n%s", out)
 	}
 }
@@ -855,8 +856,8 @@ func TestReopenLines(t *testing.T) {
 	r := engine.ReopenState{Since: at, LastCall: at, NewComments: 2, NewAttachments: []string{"0030-sosreport"}, Attachments: true,
 		CacheLifetime: 10 * time.Minute, CacheExpired: true, Estimate: 45_000, Large: true}
 	got := reopenLines(r)
-	want := []string{"since you last worked this case (2026-11-06 12:00): 2 new comments, 1 new attachment; the conversation is given them at your next message",
-		"the provider's cache has expired since the last call (2026-11-06 12:00): the next call resends the conversation, about 45,000 tokens, without it"}
+	want := []string{"since you last worked this case (2026-11-06 12:00): 2 new comments, 1 new attachment; your next message gives them to the conversation, and /ledger reads the comments",
+		"the provider's cache has expired since the last call (2026-11-06 12:00): your next message resends the conversation, about 45,000 tokens, without it; /compact goes on in a new one from the case's state and a handoff"}
 	if d := cmp.Diff(want, got); d != "" {
 		t.Errorf("the lines (-want +got):\n%s", d)
 	}

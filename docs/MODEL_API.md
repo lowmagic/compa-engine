@@ -79,7 +79,7 @@ the record is the evidence the tools stored and the messages as they were said.
 reads the comments, then counts and inventories the attachments while the ledger reads the comments it has not; the
 opening waits for the ledger up to 60 seconds from its start, and past that orients without it, the engine's
 instruction saying so, the ledger reading on and reaching the conversation at the next turn. A case reopened on its
-conversation, and `--no-open`, make no model call, the ledger's included, until the engineer chooses one (Reopening,
+conversation, and `--no-open`, make no model call, the ledger's included, until the engineer sends something that calls one (Reopening,
 below); a case whose model calls are refused starts no ledger.
 
 **Consults.** `consult(expert, question)` runs a sub-conversation with the same system prompt, tools and case block —
@@ -106,7 +106,8 @@ gained comments or attachments, a catch-up has the ledger read the comments it h
 waits, then runs one turn on the opening's budget: the case update and the ledger's update are appended at its start
 as at every turn, and the engine's instruction names the new comments and attachments and asks, briefly, what changed
 and whether it answers or opens any question. With nothing new it calls no model. Where the provider's cache has
-expired on a conversation past a size, there are three ways on, none taken without the engineer:
+expired on a conversation past a size, there are three ways on, none taken without the engineer; the chat takes Full
+at the engineer's next message and Summary for `/compact` in a case, and offers neither Suggested nor the catch-up:
 
 - **Full**: the conversation as it is; its next call resends it whole without the cache, its estimated tokens said.
 - **Suggested**, with no model call: a new conversation linked to the old one as a compaction's is, begun from the
@@ -426,7 +427,7 @@ without it.
   at its next call, redacted as every message is: ``The engineer found no evidence for a1's `X`: treat it as
   unsupported.``, or ``The engineer checked a1's `X` against e57:3-5: it is incorrect.`` followed by each range's
   lines as stored, numbered, a few lines of each and a few KiB in all. A reload before that call carries it into the
-  new conversation. It is the engineer's assertion, not evidence, and no answer: answer numbering, `/pin`, the ranked
+  new conversation. It is the engineer's assertion, not evidence, and no answer: answer numbering, `/copy`, the ranked
   evidence and a reload's last exchange leave it out. Reopened, the checks tab shows each verdict. A finding for
   reading — the citation as written, or the editor's statement, kind and words at fault — shows why, the most the
   evidence supports, or for an anchor what was asked to fulfil it, and the lines it cites in context, marked `·`; the
@@ -499,7 +500,7 @@ without it.
   never printed. A cancelled check or revision still records its state and prints the answer as
   shown before saying cancelled. A warning raised during the check or revision is printed after the answer, and the
   live view keeps the answer's rows until that print, so nothing of an answer not taken stays on screen. One
-  projection, each answer as shown, serves the chat, reopening, `/pin`, `compa ask`, a reload's last exchange and the
+  projection, each answer as shown, serves the chat, reopening, `/copy`, `compa ask`, a reload's last exchange and the
   ranked evidence. Every check is kept in the `checks` table with its findings and outcome, written under a bound of
   its own, and its calls pass the gate, redaction and barred-accounts rule and count in the case's usage. A deployment
   with no `editor` profile runs no editor.
@@ -517,7 +518,7 @@ without it.
   `chat.TestReviewRanked`). At most two calls in all, within a time bound; failing,
   cancelled or past it, it is said and nothing is kept. Its review is appended to the main conversation as a message
   of its own, headed as another model's reading, not verified and never evidence, which the main model reads at its
-  next call; nothing reviewed is rewritten, and a review is not an answer: answer numbering, `/pin`, the ranked
+  next call; nothing reviewed is rewritten, and a review is not an answer: answer numbering, `/copy`, the ranked
   evidence and a reload's last exchange leave it out. Its calls pass the gate, redaction and barred-accounts rule, are
   kept in `checks`, and count in the case's usage. A deployment with no `reviewer` profile has none, and `/review`
   says so.
@@ -577,7 +578,7 @@ the settled items one line each, bounded in size, the oldest left out first and 
 evidence name, then its number and header, times in UTC, since its lines are what later updates are compared with;
 after them, every comment not shown for its length, by name and number, saying the ledger says nothing of it, which
 an update names once when one is newly so (`engine.TestLedgerMarksTooLongCommentNotShown`).
-The ledger's calls count in the status bar's total and in `/usage` with every other call of the case.
+The ledger's calls count in the status bar's total and in `/debug usage` with every other call of the case.
 
 The ledger reads only its current schema, and files each item under one of two sides, `support` or `customer`: a
 comment by an author of another kind is read like any other, and the model says which side its item is on
@@ -948,7 +949,7 @@ checks.
 - **[C3]** A consult runs in a conversation of its own under the main one, beginning with the same case block and the
   case updates given since, and returns its answer as the tool's result with its transcript kept
   (`engine.TestCompanionConsult`, `TestConsultGetsCaseUpdates`).
-- **[C3]** `/compact` starts a linked conversation from the case block as it is now and the handoff, the old one kept;
+- **[C3]** Compaction, `/compact` in a chat, starts a linked conversation from the case block as it is now and the handoff, the old one kept;
   above the context limit a turn compacts on its own and says so, a conversation with no answer never
   (`companion.TestCompact`, `TestContextLimitCompacts`).
 - **[C3]** An answer stopped at its output cap is `budget_exceeded`, or `output_loop` where its tail repeats one
@@ -970,7 +971,7 @@ checks.
   made (`engine.TestResendRefusedOnABarredCase`, `TestResendRefusedPastTheEgressClass`); resent to another
   configured model, it is sent at that model and effort, without the provider data the original's model wrote, and
   redacted by the target provider's policy (`engine.TestResendToAnotherModel`).
-- **[C5]** `/compact` carries the pinned items into the new conversation (`engine.TestCompanionCompactCarriesItems`).
+- **[C5]** Compaction carries the pinned items and drafts into the new conversation (`engine.TestCompanionCompactCarriesItems`).
 - **[C5]** A citation to unknown evidence, to evidence the conversation was never shown, an unknown path or lines past
   the end is flagged with its reason (`engine.TestCheckCites`), a citation of an item never shown staying flagged
   once the answer holding it is stored (`engine.TestCiteOfUnshownItemStaysFlagged`), one of an item the case block
@@ -1063,11 +1064,12 @@ checks.
 - **[C11]** A catch-up with nothing new calls no model; with a new comment the ledger reads it first, then one turn
   begins with the case update and the ledger, the engine naming the comment (`engine.TestCatchUp`); a conversation a
   reload began is judged by the one it continues until its first turn (`engine.TestCatchUpAfterReload`).
-- **[C11]** The reopened case's choices show in a panel above the status bar whose rows never enter the scrollback and
-  whose area is cleared when it closes; nothing calls a model until a choice, its keys choose, and esc puts each off;
-  after a suggested reload the history still shows the earlier answers (`chat.TestReopenChoicePanel`,
-  `TestReopenChoicePanelLater`, `TestReopenChoiceSummary`); `/reload`, `/reload full`, `/ranked` and `/catchup` with
-  nothing new call no model (`chat.TestReloadCommands`).
+- **[C11]** A reopened case offers nothing to choose: it calls no model and its keys go to the input, its lines saying
+  what is new, what the next message resends where the cache has expired, and that `/compact` goes on in a new
+  conversation (`chat.TestReopenIsQuiet`, `TestReopenLines`); `/compact` in a case makes one call, the handoff, and
+  the next message goes on in the new conversation, the history keeping the earlier answers
+  (`chat.TestCompactInCase`); `/debug`, `/debug ranked` and `/debug usage` call no model
+  (`chat.TestDebugCommands`).
 - **[E1]** An answer shows a citation in a form the chat does not read, and an inline code span in no evidence the
   conversation saw, once each, after its citation flags, live and reopened, and nothing for a clean answer
   (`chat.TestAnswerFlagsShown`); look-alikes — a MAC or IPv6 address, a link's text, `(e1000)`, a span holding
@@ -1104,7 +1106,7 @@ checks.
   revision shown flagged (`engine.TestEditorNoSecondRound`); a clean answer is printed as written
   (`engine.TestEditorCleanAnswer`); the editor makes at most two calls in all (`engine.TestEditorTwoCallsInAll`).
 - **[E2]** A failing or slow editor leaves the answer as written, said unchecked (`engine.TestEditorFailsOpen`,
-  `chat.TestEditorUncheckedShown`); a revision not taken records what was shown, which reopening, `/pin` and the next
+  `chat.TestEditorUncheckedShown`); a revision not taken records what was shown, which reopening, `/copy` and the next
   call read (`engine.TestEditorRevisionNotTakenIsKept`, `chat.TestEditorRevisionNotTakenShown`); a cancelled check or
   revision keeps its state and numbering (`engine.TestEditorCancelled`, `chat.TestEditorCancelledShown`).
 - **[E2]** The editor's calls are refused for a barred case, redacted, never quote a left-out comment, and count in the

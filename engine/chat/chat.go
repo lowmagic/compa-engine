@@ -82,10 +82,6 @@ type model struct {
 	menuHeight  int
 	inputHeight int
 	liveHeight  int
-	// choice is the choice panel open, nil when none; news the reopened
-	// case's news whose catch-up is offered once the reload is chosen.
-	choice *choicePanel
-	news   *engine.ReopenState
 
 	// queue holds logical output; rows holds its wrapped remainder. Only one
 	// terminal row is inserted at a time, acknowledged before the next.
@@ -311,9 +307,9 @@ func (m *model) Init() tea.Cmd {
 
 func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	cmd := m.update(msg)
-	if m.browser == nil && m.pending == nil && m.menuHeight > 0 && m.choice == nil && len(m.completion.matches(m.input.Value())) == 0 &&
+	if m.browser == nil && m.pending == nil && m.menuHeight > 0 && len(m.completion.matches(m.input.Value())) == 0 &&
 		!m.printing && len(m.queue) == 0 && len(m.rows) == 0 {
-		// A blank separator gives a dismissed popover or choice panel the
+		// A blank separator gives a dismissed popover the
 		// same cursor reset as an ordinary transcript print, without
 		// printing its options; it is not kept in the transcript.
 		m.queue = append(m.queue, "")
@@ -429,9 +425,6 @@ func (m *model) update(msg tea.Msg) tea.Cmd {
 
 // key is a key pressed in the chat.
 func (m *model) key(k tea.KeyPressMsg) tea.Cmd {
-	if m.choice != nil && m.choiceKey(k.String()) {
-		return nil
-	}
 	if value, handled, submit := m.completion.key(m.input.Value(), k.String()); handled {
 		if value != m.input.Value() {
 			m.input.SetValue(value)
@@ -454,6 +447,9 @@ func (m *model) key(k tea.KeyPressMsg) tea.Cmd {
 		return tea.Quit
 	case "ctrl+o":
 		m.printTools()
+		return nil
+	case "ctrl+y":
+		m.copyAnswer("")
 		return nil
 	case "esc":
 		return nil
@@ -568,12 +564,7 @@ func (m *model) View() tea.View {
 	m.inputHeight = min(max(m.inputHeight, len(input)), limit)
 	held := min(m.inputHeight-len(input), max(limit-len(footer), 0))
 	room := limit - len(footer) - held
-	var options []string
-	if m.choice != nil {
-		options = m.choice.rows(m.cols(), room)
-	} else {
-		options = m.completion.rows(m.input.Value(), m.cols(), room)
-	}
+	options := m.completion.rows(m.input.Value(), m.cols(), room)
 	m.menuHeight = min(max(m.menuHeight, len(options)), room)
 	for len(options) < m.menuHeight {
 		options = append(options, "")

@@ -286,7 +286,7 @@ func TestEditorDraftCorrected(t *testing.T) {
 	h := start(t, editedSession(t), Options{NoOpen: true})
 	h.say("/draft customer-update")
 	draft := "Hello, the OVN controller on worker-1 cannot sync; we are reading its logs."
-	if out := flat(h.out()); !strings.Contains(out, draft) || strings.Contains(out, "investigation confirms") || !strings.Contains(out, "corrected by the editor: 1 statement") || !strings.Contains(out, "kept as i1") {
+	if out := flat(h.out()); !strings.Contains(out, draft) || strings.Contains(out, "investigation confirms") || !strings.Contains(out, "corrected by the editor: 1 statement") || !strings.Contains(out, "/copy a1 copies it") {
 		t.Errorf("/draft printed:\n%s", out)
 	}
 	h.say("/copy")
@@ -322,7 +322,7 @@ func editedSessionWith(t *testing.T, editorScript string) *engine.Session {
 // as written printed with the failure and the anchor asked, the
 // revision's own text never printed, even where the model wrote some
 // before calling a tool; reopening prints the same under the same names,
-// and /pin keeps what was shown.
+// and /copy copies what was shown.
 func TestEditorRevisionNotTakenShown(t *testing.T) {
 	s := editedSession(t)
 	h := start(t, s, Options{NoOpen: true})
@@ -334,7 +334,7 @@ func TestEditorRevisionNotTakenShown(t *testing.T) {
 	for _, k := range kinds {
 		h.say(k.ask)
 	}
-	h.say("/pin")
+	h.say("/copy")
 	for _, run := range []struct {
 		name string
 		h    *harness
@@ -353,9 +353,8 @@ func TestEditorRevisionNotTakenShown(t *testing.T) {
 			t.Errorf("%s:\n%s", run.name, out)
 		}
 	}
-	items, err := s.Items(t.Context())
-	if err != nil || len(items) != 1 || !strings.HasPrefix(items[0].Text, kinds[2].answer) {
-		t.Errorf("/pin kept %+v, %v", items, err)
+	if len(h.teaMsgs) != 1 || !strings.HasPrefix(fmt.Sprint(h.teaMsgs[0]), kinds[2].answer) {
+		t.Errorf("/copy asked of the terminal %v", h.teaMsgs)
 	}
 }
 

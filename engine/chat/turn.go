@@ -26,17 +26,15 @@ const (
 	// kindOpening reads the case and runs the opening turn.
 	kindOpening turnKind = iota
 	kindAnswer
-	kindAnalysis
 	kindDraft
 	kindCompact
 	kindLoad
 	// kindLedger reads the comments the ledger has not, if any, and shows
 	// the ledger.
 	kindLedger
-	// kindReload goes on with the conversation a way /reload names, and
-	// kindCatchUp asks what changed since the case was last worked.
+	// kindReload goes on in a new conversation from the case's state and
+	// a handoff, /compact in a case.
 	kindReload
-	kindCatchUp
 	// kindReview has the reviewer review the last answer or an item.
 	kindReview
 )
@@ -148,12 +146,8 @@ type (
 		loaded         string
 		// ledger is the case ledger as /ledger shows it.
 		ledger string
-		// reopen is a reopened case's state, offer what reloading it
-		// costs, for the choices the opening offers; reloaded what a
-		// reload did; note a line of the chat's own the turn ends with
-		// in place of an answer.
-		reopen   *engine.ReopenState
-		offer    engine.ReloadOffer
+		// reloaded is what a reload did; note a line of the chat's own
+		// the turn ends with in place of an answer.
 		reloaded *engine.Reloaded
 		note     string
 		// cites are text's citations, checks their checks, or checkErr why
@@ -248,8 +242,8 @@ func (m *model) startTurn(kind turnKind, status string, work turnWork) {
 // comments, counts and inventory, and, for a case new to the companion
 // unless --no-open, the ledger beside them, waited for up to its bound
 // before the opening turn. A case reopened makes no model call: the chat
-// says what is new since it was last worked instead, and offers the ways
-// on where the cache has expired and the catch-up where there is news.
+// says what is new since it was last worked instead, and what the next
+// call resends where the cache has expired, offering nothing to choose.
 // --no-open skips only model calls, never the saved history.
 func (m *model) opening() {
 	s, open := m.s, !m.noOpen
@@ -298,13 +292,7 @@ func (m *model) opening() {
 			for _, l := range reopenLines(r) {
 				send(noteMsg{noteLine(l)})
 			}
-			d := turnDone{reopen: &r}
-			if r.CacheExpired && r.Large {
-				if d.offer, err = s.ReloadOffer(ctx); err != nil {
-					return turnDone{err: err}
-				}
-			}
-			return d
+			return turnDone{}
 		}
 		if !open {
 			return turnDone{}
@@ -394,11 +382,11 @@ func reopenLines(r engine.ReopenState) []string {
 	}
 	lines := []string{"nothing new since you last worked this case (" + since + ")"}
 	if len(news) > 0 {
-		lines[0] = "since you last worked this case (" + since + "): " + strings.Join(news, ", ") + "; the conversation is given them at your next message"
+		lines[0] = "since you last worked this case (" + since + "): " + strings.Join(news, ", ") + "; your next message gives them to the conversation, and /ledger reads the comments"
 	}
 	if r.CacheExpired && r.Large {
 		lines = append(lines, "the provider's cache has expired since the last call ("+r.LastCall.Local().Format("2006-01-02 15:04")+
-			"): the next call resends the conversation, about "+engine.Thousands(r.Estimate)+" tokens, without it")
+			"): your next message resends the conversation, about "+engine.Thousands(r.Estimate)+" tokens, without it; /compact goes on in a new one from the case's state and a handoff")
 	}
 	return lines
 }
@@ -834,10 +822,6 @@ func (m *model) done(d turnDone) tea.Cmd {
 	if t != nil && d.kind != kindLedger && d.kind != kindReview && (d.kind != kindOpening || d.reply.Conversation != "" || d.err != nil) {
 		m.lastTools = t.tools
 	}
-	if d.kind == kindReload {
-		// The catch-up waits for the reload, whatever came of it.
-		defer m.offerCatchUp()
-	}
 	switch {
 	case errors.Is(d.err, context.Canceled):
 		// An answer the editor had checked or was checking is kept as
@@ -870,16 +854,9 @@ func (m *model) done(d turnDone) tea.Cmd {
 		m.print(noteLine(d.note))
 		return nil
 	}
-	if d.reopen != nil {
-		m.offerReopen(*d.reopen, d.offer)
-	}
 	model := engine.CompanionModel{}
 	if t != nil {
 		model = t.model
-	}
-	if d.kind == kindReload {
-		m.reloaded(d, model)
-		return nil
 	}
 	if d.kind == kindReview {
 		m.printReview(*d.review)
@@ -1024,16 +1001,16 @@ func (m *model) printAnswer(d turnDone, model engine.CompanionModel) {
 	case kindDraft:
 		switch {
 		case d.item.Seq != 0:
-			foot = append(foot, "the draft "+d.item.Intention+" kept as "+d.item.Name()+"; /copy "+d.item.Name()+" copies it")
+			foot = append(foot, "draft: "+d.item.Intention, "/copy "+a.label+" copies it", "/review "+a.label+" for a second opinion")
 		case errors.Is(d.err, context.Canceled):
 			foot = append(foot, "the draft was not kept: its turn was cancelled")
 		case d.draftIntention != "":
 			foot = append(foot, "draft: "+d.draftIntention)
 		}
 	case kindCompact:
-		foot = append(foot, "a handoff: the conversation goes on in a new one, begun from it and the pinned items")
+		foot = append(foot, "a handoff: the conversation goes on in a new one, begun from it and the drafts kept")
 	case kindReload:
-		foot = append(foot, "a handoff: the conversation goes on in a new one, begun from the case as it is now, the ledger, the handoff, the pinned items, "+
+		foot = append(foot, "a handoff: the conversation goes on in a new one, begun from the case as it is now, the ledger, the handoff, the drafts kept, "+
 			text.Plural(d.reloaded.Ranked, "ranked item")+" and the last exchange")
 	}
 	m.print(noteLine(strings.Join(foot, " · ")))

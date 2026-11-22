@@ -304,3 +304,21 @@ Delivers: User interface.
 
 Done when: `make check` passes; `chat.TestComments`, `chat.TestBrowserTurnsAsStored`, `chat.TestEditorCorrectionShown`
 and `chat.TestChecksSummary` verify the tabs, the raw view, the pipeline toggle and the two verdict keys.
+
+## 20. Ten commands, copying by answer and a quiet reopen
+
+Status: done
+
+The chat's commands are ten: `/draft`, `/copy`, `/turns`, `/ledger`, `/evidence`, `/check`, `/review`, `/model`,
+`/compact` and `/debug`. `/copy [aN]` and `ctrl+y` copy an answer or draft as it was shown, a draft's citations taken
+out, in place of pinned items; `/debug` takes `on`, `off`, `usage`, `experts`, `load <expert>` and `ranked`, which
+replace `/usage`, `/experts`, `/load` and `/ranked`. `/compact` in a case is the summary reload, carrying the case's
+state, the ledger, the ranked evidence and the last exchange beside the handoff. A reopened case offers no panel: its
+lines say what is new and what the next message resends, and the next message goes on. `/analyze`, `/pin`, `/items`,
+`/reload` and `/catchup` leave the chat; the engine keeps them.
+
+Delivers: User interface.
+
+Done when: `make check` passes; `chat.TestDraftKeptAndCopied` verifies `/copy`, `ctrl+y` and a refused `/copy a9`;
+`chat.TestReopenIsQuiet`, `TestReopenLines` and `TestCompactInCase` verify the quiet reopen and `/compact`;
+`chat.TestDebugCommands` and `TestCompletionKeys` verify `/debug`'s arguments and the menu.
