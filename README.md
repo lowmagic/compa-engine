@@ -34,6 +34,23 @@ os.Exit(cli.Main(os.Args[1:], engine.Options{
 - Tests need no model: they run on a fixture provider. Live tests are opt-in, with `COMPA_LIVE_VERTEX=1` and Google
   Application Default Credentials.
 
+## How this was built
+
+I wrote the spec, the architecture and the invariants (no default egress, redaction before anything leaves the host,
+every observation cites a byte span, the engine never names a cause), and Claude Code wrote most of the Go against
+them. It was developed in a private monorepo, rebuilt once and renamed twice. The hard part was epistemic discipline:
+early versions kept naming a root cause from thin evidence, so I narrowed it to cited observations, open questions, and
+causal leads framed as things to test. I cleaned it up, split it into separate modules, and published it as one
+squashed commit in November 2026.
+
+The tests are how I hold it to the spec: about 32k of the 73k lines are tests, and they run on a fixture model with
+no network, so CI checks behavior without calling a provider.
+
+What I decided and kept deciding: the scope (triage and data gathering, never diagnosis), the sandbox and redaction
+boundaries, the evidence and citation format, and when the companion is allowed to suggest a causal lead versus state
+an observation. What I delegated: implementation inside those boundaries, test scaffolding, and refactors that the
+standards check enforces.
+
 ## Documents
 
 - [Specification](docs/SPEC.md): what compa must do
