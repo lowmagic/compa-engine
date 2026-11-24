@@ -374,3 +374,18 @@ Done when: `make check` passes; `expert.TestLoadRejects`, `TestLoadReferenceWarn
 `TestReadReferenceOfferedForPinnedSnapshot`, `TestReadReferenceRedacted`, `TestUnsourcedCommandFromReference`, and
 `TestTrajectoryReferences` verify runtime behavior, command checks, and trajectory; and
 `chat.TestReadReferenceLabels` verifies the chat's status and tool-line labels.
+
+## 24. Grep keeps leading lines alongside matches
+
+Status: done
+
+`grep` takes an optional `keep` parameter (0 to 100, 0 by default) that keeps the first `keep` lines of each file with
+a match, such as a table's header or file preamble, in line order without counting them toward `max_matches` or
+duplicating them when context or matches overlap, in both `from: start` and `from: end` runs, and refuses out-of-range
+values at load and run time.
+
+Delivers: Collection.
+
+Done when: `make check` passes; `collect.TestGrepKeep`, `TestGrepKeepFromEnd`, `TestGrepRefusesBadKeep` and
+`TestCheckStage` verify single- and multi-file runs, match and context overlap, match-limit accounting, `from: end`
+eviction and cap holding, zero-value identity, and out-of-range refusals.

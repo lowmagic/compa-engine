@@ -42,6 +42,9 @@ type (
 		// From is which matches max_matches keeps: start, the first
 		// (default), or end, the last.
 		From string `json:"from"`
+		// Keep is how many lines from the start of each file are kept
+		// alongside its matches, such as a table's header. 0 keeps none.
+		Keep int `json:"keep"`
 	}
 	readParams struct {
 		Path      string `json:"path"`
@@ -173,6 +176,19 @@ func decodeParams(name string, m map[string]any) (any, error) {
 // maxFindDepth bounds find's depth limits, far deeper than any capture's
 // tree.
 const maxFindDepth = 64
+
+// maxGrepKeep bounds grep's kept leading lines per file, far more than
+// a table header or file preamble.
+const maxGrepKeep = 100
+
+// check refuses a keep count out of range, so a package giving one fails
+// to load and a run giving one runs nothing.
+func (p *grepParams) check() error {
+	if p.Keep < 0 || p.Keep > maxGrepKeep {
+		return fmt.Errorf("keep must be from 0 to %d, not %d", maxGrepKeep, p.Keep)
+	}
+	return nil
+}
 
 // check refuses depth limits out of range, so a package giving one fails
 // to load and a run giving one runs nothing.

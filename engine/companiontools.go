@@ -120,6 +120,7 @@ var primitiveTools = []primitiveTool{
 			"pattern": strProp("RE2 pattern."), "path": strProp("File or directory under the artifact root."), "glob": strProp("Glob on base names under path."),
 			"ignore_case": boolean("Match ignoring case."), "context_before": integer("Lines before each match.", 0), "context_after": integer("Lines after each match.", 0),
 			"max_matches": integer("Matches kept.", 1), "from": enum("Which matches max_matches keeps: the first or the last.", "start", "end"),
+			"keep": integer("First lines of each matching file kept alongside its matches, such as a table header; 0 keeps none.", 0),
 		}, required: []string{"pattern"}},
 	{name: "read", primitive: "read", description: "A line or byte range of one file, or its head or tail; gzipped files read decompressed for lines.",
 		params: map[string]any{
