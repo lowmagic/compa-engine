@@ -374,6 +374,12 @@ func runGrep(p *grepParams, e *primEnv) error {
 	matches := 0
 	for i := range srcs {
 		s := &srcs[i]
+		type keptLine struct {
+			n    int
+			text string
+		}
+		var kept []keptLine
+		fileMatched := false
 		var before []string
 		after := 0
 		lastPrinted := 0
@@ -388,6 +394,15 @@ func runGrep(p *grepParams, e *primEnv) error {
 					return errOutputFull
 				}
 				matches++
+				fileMatched = true
+				for _, k := range kept {
+					if k.n > lastPrinted {
+						if err := emit(k.n, "-", k.text); err != nil {
+							return err
+						}
+					}
+				}
+				kept = kept[:0]
 				for j, b := range before {
 					ln := n - len(before) + j
 					if ln > lastPrinted {
@@ -399,6 +414,19 @@ func runGrep(p *grepParams, e *primEnv) error {
 				before = before[:0]
 				after = p.ContextAfter
 				return emit(n, ":", line)
+			}
+			if p.Keep > 0 && n <= p.Keep {
+				if fileMatched {
+					if after > 0 {
+						after--
+					}
+					if n > lastPrinted {
+						return emit(n, "-", line)
+					}
+					return nil
+				}
+				kept = append(kept, keptLine{n: n, text: line})
+				return nil
 			}
 			if after > 0 {
 				after--
@@ -434,6 +462,8 @@ func grepLast(re *regexp.Regexp, p *grepParams, max int, srcs []source, e *primE
 		text string
 	}
 	var groups [][]line
+	fileKept := map[string][]line{}
+	fileCount := map[string]int{}
 	held, total := 0, 0
 	size := func(g []line) int {
 		n := 0
@@ -442,11 +472,35 @@ func grepLast(re *regexp.Regexp, p *grepParams, max int, srcs []source, e *primE
 		}
 		return n
 	}
+	trim := func() {
+		for len(groups) > max || (held > e.out.limit && len(groups) > 1) {
+			f := groups[0][0].file
+			held -= size(groups[0])
+			groups = groups[1:]
+			fileCount[f]--
+			if fileCount[f] == 0 {
+				if k, ok := fileKept[f]; ok {
+					held -= size(k)
+					delete(fileKept, f)
+				}
+			}
+		}
+	}
 	for i := range srcs {
 		s := &srcs[i]
+		var kept []line
 		var before []line
 		after := 0
 		err := e.lines(s, func(n int, text string) error {
+			if p.Keep > 0 && n <= p.Keep {
+				kl := line{s.name, n, "-", text}
+				kept = append(kept, kl)
+				if fileCount[s.name] > 0 {
+					fileKept[s.name] = kept
+					held += size([]line{kl})
+					trim()
+				}
+			}
 			if re.MatchString(text) {
 				total++
 				g := append(append([]line{}, before...), line{s.name, n, ":", text})
@@ -454,10 +508,12 @@ func grepLast(re *regexp.Regexp, p *grepParams, max int, srcs []source, e *primE
 				after = p.ContextAfter
 				groups = append(groups, g)
 				held += size(g)
-				for len(groups) > max || (held > e.out.limit && len(groups) > 1) {
-					held -= size(groups[0])
-					groups = groups[1:]
+				if fileCount[s.name] == 0 && len(kept) > 0 {
+					fileKept[s.name] = kept
+					held += size(kept)
 				}
+				fileCount[s.name]++
+				trim()
 				return nil
 			}
 			if after > 0 {
@@ -483,19 +539,45 @@ func grepLast(re *regexp.Regexp, p *grepParams, max int, srcs []source, e *primE
 		e.out.truncated = true
 		e.note(fmt.Sprintf("kept the last %d of %d matches; the earlier ones are left out", len(groups), total))
 	}
-	// A line in two matches' context is printed once, in place.
+	// A line in two matches' context, or kept from the start of a file,
+	// is printed once, in place; a kept line that is also a surviving
+	// match keeps its match separator.
 	type at struct {
 		file string
 		n    int
 	}
-	printed := map[at]bool{}
+	matched := map[at]bool{}
 	for _, g := range groups {
 		for _, l := range g {
-			if printed[at{l.file, l.n}] {
-				continue
+			if l.sep == ":" {
+				matched[at{l.file, l.n}] = true
 			}
-			printed[at{l.file, l.n}] = true
-			if err := e.out.line(fmt.Sprintf("%s%s%d%s%s", l.file, l.sep, l.n, l.sep, l.text)); err != nil {
+		}
+	}
+	printed := map[at]bool{}
+	keptEmitted := map[string]bool{}
+	emit := func(l line) error {
+		if printed[at{l.file, l.n}] {
+			return nil
+		}
+		printed[at{l.file, l.n}] = true
+		return e.out.line(fmt.Sprintf("%s%s%d%s%s", l.file, l.sep, l.n, l.sep, l.text))
+	}
+	for _, g := range groups {
+		f := g[0].file
+		if !keptEmitted[f] {
+			keptEmitted[f] = true
+			for _, l := range fileKept[f] {
+				if matched[at{l.file, l.n}] {
+					l.sep = ":"
+				}
+				if err := emit(l); err != nil {
+					return err
+				}
+			}
+		}
+		for _, l := range g {
+			if err := emit(l); err != nil {
 				return err
 			}
 		}

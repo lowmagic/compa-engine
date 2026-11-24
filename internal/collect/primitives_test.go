@@ -74,6 +74,133 @@ func TestGrep(t *testing.T) {
 	if !rec.Truncated || strings.Count(string(rec.Output), "\n") != 2 {
 		t.Errorf("max_matches: truncated %v\n%s", rec.Truncated, rec.Output)
 	}
+	// keep at its zero value prints what leaving it out prints, byte for byte.
+	plain := mustOK(t, run(t, mustGather, prim("grep", map[string]any{"pattern": "ready check", "path": ovnLog, "context_before": 1})))
+	zero := mustOK(t, run(t, mustGather, prim("grep", map[string]any{"pattern": "ready check", "path": ovnLog, "context_before": 1, "keep": 0})))
+	if zero != plain {
+		t.Errorf("keep 0: got\n%s\nwant\n%s", zero, plain)
+	}
+}
+
+func TestGrepKeep(t *testing.T) {
+	root := t.TempDir()
+	tableA := "+----+------+--------+\n" +
+		"| ID | Name | Status |\n" +
+		"+----+------+--------+\n" +
+		"| 1  | web  | ACTIVE |\n" +
+		"| 2  | api  | DOWN   |\n" +
+		"| 3  | db   | DOWN   |\n" +
+		"+----+------+--------+\n"
+	tableB := "+----+------+--------+\n" +
+		"| ID | Name | Status |\n" +
+		"+----+------+--------+\n" +
+		"| 9  | ok   | ACTIVE |\n" +
+		"+----+------+--------+\n"
+	tableC := "+----+------+--------+\n" +
+		"| ID | Name | Status |\n" +
+		"+----+------+--------+\n" +
+		"| 4  | job  | DOWN   |\n" +
+		"+----+------+--------+\n"
+	for name, body := range map[string]string{
+		"a.txt":     tableA,
+		"b.txt":     tableB,
+		"c.txt":     tableC,
+		"short.txt": "header\nmatch\n",
+	} {
+		if err := os.WriteFile(filepath.Join(root, name), []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Single file: header kept once with '-', not counting toward max_matches.
+	rec := run(t, root, prim("grep", map[string]any{"pattern": "DOWN", "path": "a.txt", "keep": 3, "max_matches": 1}))
+	want := "a.txt-1-+----+------+--------+\n" +
+		"a.txt-2-| ID | Name | Status |\n" +
+		"a.txt-3-+----+------+--------+\n" +
+		"a.txt:5:| 2  | api  | DOWN   |\n"
+	if got := mustOK(t, rec); got != want || !rec.Truncated || stopBy(rec) != "match_limit" {
+		t.Errorf("single file max_matches 1: truncated %v stop %q got\n%s\nwant\n%s", rec.Truncated, stopBy(rec), got, want)
+	}
+
+	// Context_before overlapping kept lines: no duplicates, exact line order.
+	got := mustOK(t, run(t, root, prim("grep", map[string]any{"pattern": "api", "path": "a.txt", "keep": 3, "context_before": 3})))
+	want = "a.txt-1-+----+------+--------+\n" +
+		"a.txt-2-| ID | Name | Status |\n" +
+		"a.txt-3-+----+------+--------+\n" +
+		"a.txt-4-| 1  | web  | ACTIVE |\n" +
+		"a.txt:5:| 2  | api  | DOWN   |\n"
+	if got != want {
+		t.Errorf("overlap context_before: got\n%s\nwant\n%s", got, want)
+	}
+
+	// A kept line that also matches keeps ':', and remaining kept lines still emit with '-'.
+	got = mustOK(t, run(t, root, prim("grep", map[string]any{"pattern": "Status|api", "path": "a.txt", "keep": 3, "context_after": 1})))
+	want = "a.txt-1-+----+------+--------+\n" +
+		"a.txt:2:| ID | Name | Status |\n" +
+		"a.txt-3-+----+------+--------+\n" +
+		"a.txt:5:| 2  | api  | DOWN   |\n" +
+		"a.txt-6-| 3  | db   | DOWN   |\n"
+	if got != want {
+		t.Errorf("kept line matches: got\n%s\nwant\n%s", got, want)
+	}
+
+	// Multi-file glob: non-matching b.txt emits nothing; a.txt and c.txt keep their own headers.
+	got = mustOK(t, run(t, root, prim("grep", map[string]any{"pattern": "DOWN", "glob": "*.txt", "keep": 3})))
+	want = "a.txt-1-+----+------+--------+\n" +
+		"a.txt-2-| ID | Name | Status |\n" +
+		"a.txt-3-+----+------+--------+\n" +
+		"a.txt:5:| 2  | api  | DOWN   |\n" +
+		"a.txt:6:| 3  | db   | DOWN   |\n" +
+		"c.txt-1-+----+------+--------+\n" +
+		"c.txt-2-| ID | Name | Status |\n" +
+		"c.txt-3-+----+------+--------+\n" +
+		"c.txt:4:| 4  | job  | DOWN   |\n"
+	if got != want {
+		t.Errorf("multi-file: got\n%s\nwant\n%s", got, want)
+	}
+
+	// File with no matches emits nothing.
+	if got := mustOK(t, run(t, root, prim("grep", map[string]any{"pattern": "DOWN", "path": "b.txt", "keep": 3}))); got != "" {
+		t.Errorf("no match: got %q, want empty", got)
+	}
+
+	// keep larger than file length emits only existing lines.
+	got = mustOK(t, run(t, root, prim("grep", map[string]any{"pattern": "match", "path": "short.txt", "keep": 10})))
+	if got != "short.txt-1-header\nshort.txt:2:match\n" {
+		t.Errorf("short file: got %q", got)
+	}
+
+	// Previous stage input (piped).
+	got = mustOK(t, run(t, root,
+		prim("read", map[string]any{"path": "a.txt"}),
+		prim("grep", map[string]any{"pattern": "api", "keep": 3}),
+	))
+	want = "--1-+----+------+--------+\n" +
+		"--2-| ID | Name | Status |\n" +
+		"--3-+----+------+--------+\n" +
+		"-:5:| 2  | api  | DOWN   |\n"
+	if got != want {
+		t.Errorf("piped keep: got\n%s\nwant\n%s", got, want)
+	}
+}
+
+func TestGrepRefusesBadKeep(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "a.txt"), []byte("line\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for _, k := range []int{-1, maxGrepKeep + 1} {
+		s := prim("grep", map[string]any{"pattern": "line", "path": "a.txt", "keep": k})
+		if err := CheckStage(s); err == nil {
+			t.Errorf("CheckStage accepted keep=%d", k)
+		}
+		if err := ValidateStage(s); err == nil {
+			t.Errorf("ValidateStage accepted keep=%d", k)
+		}
+		if rec := run(t, root, s); rec.Status == StatusOK {
+			t.Errorf("Run accepted keep=%d", k)
+		}
+	}
 }
 
 func TestRead(t *testing.T) {
@@ -266,7 +393,8 @@ func TestCheckStage(t *testing.T) {
 	short := "*.yaml"
 	ok := []expert.Stage{
 		{Primitive: "find", Shorthand: &short},
-		prim("grep", map[string]any{"pattern": "x", "max_matches": "{{max}}"}),
+		prim("grep", map[string]any{"pattern": "x", "max_matches": "{{max}}", "keep": "{{k}}"}),
+		prim("grep", map[string]any{"pattern": "x", "keep": 3}),
 		prim("logs.window", map[string]any{"start": "{{from}}", "end": "{{to}}"}),
 	}
 	for _, s := range ok {
@@ -282,6 +410,8 @@ func TestCheckStage(t *testing.T) {
 		"templated unknown": prim("grep", map[string]any{"pattern": "x", "bogus": "{{v}}"}),
 		// An engine without a parameter refuses a package using it.
 		"find unknown parameter": prim("find", map[string]any{"maxdepth": 2}),
+		"grep negative keep":     prim("grep", map[string]any{"pattern": "x", "keep": -1}),
+		"grep huge keep":         prim("grep", map[string]any{"pattern": "x", "keep": maxGrepKeep + 1}),
 	}
 	for name, s := range bad {
 		if err := CheckStage(s); err == nil {
