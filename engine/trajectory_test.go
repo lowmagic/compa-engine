@@ -659,3 +659,88 @@ func TestTurnKindReadsBothAnalyzeAsks(t *testing.T) {
 		}
 	}
 }
+
+// TestTrajectoryReferences: the trajectory records read_reference calls
+// (read and refused, in the main conversation and in consults), counts
+// non-refused reads in Totals.References, renders them, and includes read
+// reference tokens in GuidanceShare without double-counting repeat reads.
+func TestTrajectoryReferences(t *testing.T) {
+	td := t.TempDir()
+	writeRefExpert(t, td, "refs", "fixture.refs", "0.1.0",
+		map[string]string{"references/guide.md": "# Guide\n\nSynthetic guide body for tokens.\n"},
+		map[string]string{"references/guide.md": "Guide"},
+		"Read `references/guide.md`.\n",
+	)
+	var step atomic.Int64
+	s, _ := companionSession(t, func(context.Context, model.Request) (*modelfixture.Answer, error) {
+		var a *modelfixture.Answer
+		switch step.Add(1) {
+		case 1:
+			a = modelfixture.Calling(
+				call("c1", readReferenceTool, map[string]any{"expert": "openshift.networking", "path": "references/ovn.md"}),
+				call("c2", readReferenceTool, map[string]any{"expert": "openshift.networking", "path": "references/missing.md"}),
+			)
+		case 2:
+			// Repeat read: should record in References, not double-count GuidanceLoad.
+			a = modelfixture.Calling(
+				call("c3", readReferenceTool, map[string]any{"expert": "openshift.networking", "path": "references/ovn.md"}),
+				call("c4", "consult", map[string]any{"expert": "fixture.refs", "question": "Check the guide."}),
+			)
+		case 3: // consult
+			a = modelfixture.Calling(call("k1", readReferenceTool, map[string]any{"expert": "fixture.refs", "path": "references/guide.md"}))
+		case 4: // consult answer
+			a = modelfixture.Text("Consult done.")
+		default:
+			a = modelfixture.Text("Main done.")
+		}
+		a.Usage = cachedUsage
+		return a, nil
+	}, td)
+	ctx := context.Background()
+	if _, err := s.Talk(ctx, "Read references.", nil); err != nil {
+		t.Fatal(err)
+	}
+	got, err := s.Trajectory(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Turns) != 1 || len(got.Turns[0].Consults) != 1 {
+		t.Fatalf("unexpected trajectory: %+v", got)
+	}
+	turn := got.Turns[0]
+	wantRefs := []ReferenceRead{
+		{Expert: "openshift.networking", Path: "references/ovn.md"},
+		{Expert: "openshift.networking", Path: "references/missing.md", Refused: true},
+		{Expert: "openshift.networking", Path: "references/ovn.md", Repeated: true},
+	}
+	if d := cmp.Diff(wantRefs, turn.References); d != "" {
+		t.Errorf("turn references (-want +got):\n%s", d)
+	}
+	wantConsultRefs := []ReferenceRead{{Expert: "fixture.refs", Path: "references/guide.md"}}
+	if d := cmp.Diff(wantConsultRefs, turn.Consults[0].References); d != "" {
+		t.Errorf("consult references (-want +got):\n%s", d)
+	}
+	if got.Totals.References != 1 {
+		t.Errorf("Totals.References = %d, want 1", got.Totals.References)
+	}
+	// GuidanceLoad should include openshift.networking (load) + references/ovn.md once (not repeat).
+	if len(turn.Guidance.Experts) != 2 || turn.Guidance.Experts[1].Path != "references/ovn.md" {
+		t.Errorf("turn guidance experts = %+v, want preload + one reference", turn.Guidance.Experts)
+	}
+	if cg := turn.Consults[0].Guidance; cg == nil || len(cg.Experts) != 2 || cg.Experts[1].Path != "references/guide.md" {
+		t.Errorf("consult guidance experts = %+v, want consult ask + reference", cg)
+	}
+	out := RenderTrajectory(got)
+	for _, want := range []string{
+		"  reference openshift.networking references/ovn.md read\n",
+		"  reference openshift.networking references/missing.md refused\n",
+		"  reference openshift.networking references/ovn.md already read\n",
+		"    reference fixture.refs references/guide.md read\n",
+		"  1 reference read\n",
+		"openshift.networking 0.1.0 references/ovn.md ",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("trajectory output lacks %q:\n%s", want, out)
+		}
+	}
+}

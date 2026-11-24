@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/fs"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -232,6 +233,44 @@ func TestExpertCheckIsDeterministicAndWritesNothing(t *testing.T) {
 	}
 	if after := snapshot(t, watched); after != before {
 		t.Errorf("files changed:\nbefore:\n%s\nafter:\n%s", before, after)
+	}
+}
+
+func TestExpertCheckReferenceWarnings(t *testing.T) {
+	e := newEnv(t)
+	root := t.TempDir()
+	pkg := filepath.Join(root, "refwarn")
+	if err := os.MkdirAll(filepath.Join(pkg, "references"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for rel, content := range map[string]string{
+		"expert.yaml": "apiVersion: compa.lowmag.cc/expert/v1alpha3\nkind: Expert\n" +
+			"metadata: {id: check.refwarn, version: 0.1.0, summary: Reference warning fixture}\n" +
+			"spec:\n  engineApi: '>=0.2.0 <0.3.0'\n  analyst: analyst.md\n  references:\n" +
+			"    - {path: references/soft.md, summary: Past soft bound}\n" +
+			"    - {path: references/unmentioned.md, summary: Not mentioned in analyst}\n",
+		"analyst.md":                "Read `references/soft.md` when needed.\n",
+		"references/soft.md":        strings.Repeat("x", (32<<10)+1),
+		"references/unmentioned.md": "Unmentioned reference body.\n",
+	} {
+		if err := os.WriteFile(filepath.Join(pkg, filepath.FromSlash(rel)), []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	r, code := e.check(root)
+	if code != 0 || r.Totals.Warnings != 2 {
+		t.Fatalf("exit %d, totals %+v, packages %+v", code, r.Totals, r.Packages)
+	}
+	p := r.Packages[r.pkg(t, "check.refwarn")]
+	if !p.Usable || len(p.Warnings) != 2 {
+		t.Fatalf("usable %v, warnings %v", p.Usable, p.Warnings)
+	}
+	joined := strings.Join(p.Warnings, "\n")
+	if !strings.Contains(joined, "soft reference bound") || !strings.Contains(joined, "does not mention references/unmentioned.md") {
+		t.Errorf("unexpected warnings: %v", p.Warnings)
+	}
+	if _, code := e.check("--fail-on-warning", root); code != 1 {
+		t.Errorf("--fail-on-warning: exit %d, want 1", code)
 	}
 }
 

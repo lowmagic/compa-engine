@@ -123,8 +123,15 @@ func TestLoadRejects(t *testing.T) {
 		{"schema violation", map[string]string{"expert.yaml": strings.Replace(baseManifest, "kind: Expert", "kind: Agent", 1)}, "/kind"},
 		{"missing manifest", map[string]string{"expert.yaml": ""}, "expert.yaml: missing"},
 		{"missing analyst", map[string]string{"analyst.md": ""}, `file "analyst.md" not found`},
-		{"reference escapes", map[string]string{"expert.yaml": baseManifest + "  references: [refs/../../outside.md]\n"}, "escapes the package"},
-		{"unnormalized reference", map[string]string{"expert.yaml": baseManifest + "  references: [refs/./a.md]\n", "refs/a.md": "x"}, "not a normalized path"},
+		{"reference escapes", map[string]string{"expert.yaml": baseManifest + "  references:\n    - {path: refs/../../outside.md, summary: Escapes}\n"}, "escapes the package"},
+		{"unnormalized reference", map[string]string{"expert.yaml": baseManifest + "  references:\n    - {path: refs/./a.md, summary: Unnormalized}\n", "refs/a.md": "x"}, "not a normalized path"},
+		{"duplicate reference path", map[string]string{"expert.yaml": baseManifest + "  references:\n    - {path: refs/a.md, summary: First}\n    - {path: refs/a.md, summary: Second}\n", "refs/a.md": "x"}, "already listed at spec.references[0]"},
+		{"reference is analyst", map[string]string{"expert.yaml": baseManifest + "  references:\n    - {path: analyst.md, summary: Analyst}\n"}, "is spec.analyst, not a reference file"},
+		{"reference is tests file", map[string]string{"expert.yaml": baseManifest + "  references:\n    - {path: tests.yaml, summary: Tests}\n"}, "is a package definition file"},
+		{"reference is manifest", map[string]string{"expert.yaml": baseManifest + "  references:\n    - {path: expert.yaml, summary: Manifest}\n"}, "is a package definition file"},
+		{"empty reference", map[string]string{"expert.yaml": baseManifest + "  references:\n    - {path: refs/a.md, summary: Empty}\n", "refs/a.md": "  \n\t\n"}, "is empty"},
+		{"non-utf8 reference", map[string]string{"expert.yaml": baseManifest + "  references:\n    - {path: refs/a.bin, summary: Binary}\n", "refs/a.bin": "\xff\xfe\xfd"}, "not valid UTF-8 text"},
+		{"names a model in reference summary", map[string]string{"expert.yaml": baseManifest + "  references:\n    - {path: refs/a.md, summary: Tuned for Claude}\n", "refs/a.md": "notes"}, `("claude")`},
 		{"test listed but undefined", map[string]string{"expert.yaml": strings.Replace(baseManifest, "[test.one]", "[test.one, test.two]", 1)}, "test.two is not defined"},
 		{"test defined but unlisted", map[string]string{"expert.yaml": strings.Replace(baseManifest, "[test.one]", "[]", 1)}, "not listed in spec.tests"},
 		{"tests file missing", map[string]string{"tests.yaml": ""}, "tests.yaml is missing"},
@@ -276,6 +283,71 @@ func TestCheckParamValue(t *testing.T) {
 	for _, c := range cases {
 		if err := CheckParamValue(c.p, c.v); (err != nil) != c.fail {
 			t.Errorf("CheckParamValue(%+v, %v) = %v, want failure %v", c.p, c.v, err, c.fail)
+		}
+	}
+}
+
+func TestLoadReferenceWarnings(t *testing.T) {
+	manifest := baseManifest + "  references:\n    - {path: refs/a.md, summary: Lookup table}\n"
+	okFiles := with(baseFiles(), map[string]string{
+		"expert.yaml": manifest,
+		"analyst.md":  "guidance mentioning refs/a.md",
+		"refs/a.md":   strings.Repeat("x", ReferenceWarnBytes),
+	})
+	pkg, err := Loader{}.Load(writePackage(t, t.TempDir(), "ok", okFiles))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(pkg.Warnings) != 0 {
+		t.Errorf("within bounds and mentioned: warnings %v", pkg.Warnings)
+	}
+
+	// Past soft bound: warns.
+	softPkg, err := Loader{}.Load(writePackage(t, t.TempDir(), "soft", with(okFiles, map[string]string{
+		"refs/a.md": strings.Repeat("x", ReferenceWarnBytes+1),
+	})))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(softPkg.Warnings) != 1 || !strings.Contains(softPkg.Warnings[0], "soft reference bound") {
+		t.Errorf("soft bound warnings = %v", softPkg.Warnings)
+	}
+
+	// Past hard bound: warns naming refusal.
+	hardPkg, err := Loader{}.Load(writePackage(t, t.TempDir(), "hard", with(okFiles, map[string]string{
+		"refs/a.md": strings.Repeat("x", ReferenceMaxBytes+1),
+	})))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(hardPkg.Warnings) != 1 || !strings.Contains(hardPkg.Warnings[0], "read_reference will refuse it") {
+		t.Errorf("hard bound warnings = %v", hardPkg.Warnings)
+	}
+
+	// Sentence ending with period matches the whole path token.
+	periodPkg, err := Loader{}.Load(writePackage(t, t.TempDir(), "period", with(okFiles, map[string]string{
+		"analyst.md": "See refs/a.md.",
+	})))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(periodPkg.Warnings) != 0 {
+		t.Errorf("trailing period: warnings %v", periodPkg.Warnings)
+	}
+
+	// Unmentioned or substring/prefix/suffix matches in analyst.md: warns.
+	for name, analyst := range map[string]string{
+		"unmentioned": "guidance without the path",
+		"substring":   "See foo/refs/a.md, refs/a.md.old, and ../refs/a.md.",
+	} {
+		unmentionedPkg, err := Loader{}.Load(writePackage(t, t.TempDir(), name, with(okFiles, map[string]string{
+			"analyst.md": analyst,
+		})))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(unmentionedPkg.Warnings) != 1 || !strings.Contains(unmentionedPkg.Warnings[0], "does not mention refs/a.md") {
+			t.Errorf("%s warnings = %v", name, unmentionedPkg.Warnings)
 		}
 	}
 }

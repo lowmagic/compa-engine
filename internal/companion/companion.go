@@ -72,8 +72,9 @@ type Call struct {
 	// consult.
 	Conversation string
 	// Consult runs a sub-conversation with expert's guidance on question
-	// and returns its answer; nil within a consult, which may not consult.
-	Consult func(ctx context.Context, expert, guidance, question string) (string, error)
+	// and returns its answer, recording pin on the consult conversation;
+	// nil within a consult, which may not consult.
+	Consult func(ctx context.Context, expert, guidance, question string, pin json.RawMessage) (string, error)
 }
 
 // Result is what a tool returns: the text the model reads, whether it is
@@ -768,8 +769,8 @@ func (l *Loop) runCalls(ctx context.Context, conv string, t *turn, consult bool,
 		}
 		call := Call{ID: c.ID, Name: c.Name, Args: c.Args, Conversation: conv}
 		if !consult {
-			call.Consult = func(ctx context.Context, expert, guidance, question string) (string, error) {
-				return l.consult(ctx, conv, t, expert, guidance, question, on)
+			call.Consult = func(ctx context.Context, expert, guidance, question string, pin json.RawMessage) (string, error) {
+				return l.consult(ctx, conv, t, expert, guidance, question, pin, on)
 			}
 		}
 		wg.Add(1)
@@ -823,7 +824,7 @@ func ConsultGuidance(ask, question string) (string, bool) {
 // the case ledger and its updates — so a correction after the case block
 // reaches the expert as it reached the companion; then the guidance and
 // the question. It spends the turn's budget, and its transcript stays.
-func (l *Loop) consult(ctx context.Context, parent string, t *turn, expert, guidance, question string, on func(Event)) (string, error) {
+func (l *Loop) consult(ctx context.Context, parent string, t *turn, expert, guidance, question string, pin json.RawMessage, on func(Event)) (string, error) {
 	msgs, err := l.Store.Messages(ctx, parent)
 	if err != nil {
 		return "", err
@@ -840,6 +841,11 @@ func (l *Loop) consult(ctx context.Context, parent string, t *turn, expert, guid
 	now := l.now()
 	if err := l.Store.create(ctx, Conversation{ID: id, Kind: "consult", Parent: parent, Expert: expert, CreatedAt: now}); err != nil {
 		return "", err
+	}
+	if len(pin) > 0 {
+		if err := l.Store.AddPin(ctx, id, pin); err != nil {
+			return "", err
+		}
 	}
 	if err := l.Store.append(ctx, id, Message{Message: model.Message{Role: model.RoleUser, Text: msgs[0].Text, Break: true}, Kind: KindCase, CreatedAt: now, Shows: shows[msgs[0].Seq]}); err != nil {
 		return "", err

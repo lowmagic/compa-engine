@@ -1,6 +1,6 @@
 # compa — Expert API Contract
 
-Version v1alpha3 of the Expert manifest, with shared tool catalogs (§Shared tool catalog); catalogs and tests files stay at v1alpha2. The schemas are in `api/expert/`, one directory per version. Engine API `0.2.1`. This document governs the **runtime extension interface**, not development instructions. The engine implements the API; expert repositories supply packages. Companion to `docs/MODEL_API.md`, which governs the conversation, its tools and the model layer, and to `docs/COLLECTION.md`, which governs how tools run.
+Version v1alpha3 of the Expert manifest, with shared tool catalogs (§Shared tool catalog); catalogs and tests files stay at v1alpha2. The schemas are in `api/expert/`, one directory per version. Engine API `0.2.2`. This document governs the **runtime extension interface**, not development instructions. The engine implements the API; expert repositories supply packages. Companion to `docs/MODEL_API.md`, which governs the conversation, its tools and the model layer, and to `docs/COLLECTION.md`, which governs how tools run.
 
 ## Purpose and boundaries
 
@@ -40,7 +40,9 @@ metadata:
 spec:
   engineApi: '>=0.2.0 <0.3.0'
   analyst: analyst.md
-  references: [references/ovn.md]
+  references:
+    - path: references/ovn.md
+      summary: OVN-Kubernetes flow tables, NB/SB schema notes, and packet-trace rules
   routing:
     keys: [openshift-networking] # illustrative; routing keys as the deployment's routing library names them
     signals:
@@ -87,11 +89,11 @@ The public `Case` and the stub source support optional `Components` and `Tags`; 
 ### Operations
 
 1. **Discover:** scan configured local expert roots and the bundled install set; do not execute discovered files.
-2. **Validate:** enforce schema, unique IDs, SemVer version syntax, API compatibility, a summary within its bound, valid references, valid tests (known primitives, declared binaries), absence of provider/model references, content integrity, and resource limits. Reject malformed or incompatible packages with actionable errors.
+2. **Validate:** enforce schema, unique IDs, SemVer version syntax, API compatibility, a summary within its bound, valid references (each `{path, summary}` with a normalized package-local path that names neither `spec.analyst` nor a package definition file, unique among `spec.references`, a single-line summary of at most 160 characters, and non-empty UTF-8 text), valid tests (known primitives, declared binaries), absence of provider/model references, content integrity, and resource limits. Reject malformed or incompatible packages with actionable errors.
 3. **Resolve and pin:** select a concrete version and immutable content digest when an expert is loaded into a conversation. The pin — ID, version, digest and catalog versions — holds for that conversation. Resolve multiple versions deterministically; do not silently upgrade mid-conversation.
 4. **Route:** evaluate declared routing keys and signals against normalized evidence, deterministically. When the case's routing key has a primary expert in the routing library and the expert is installed, the engine loads it before the opening turn's first model call: its own `load_expert` call and result follow the case block, as if the model had asked. Routing may nominate several experts and never stops the model or the engineer loading another. A signal's fact is observed, known absent (a producer read its evidence completely and reported it missing), or unknown. An unknown fact neither matches nor contradicts any signal, so `present: false` matches only a fact known to be absent, never missing or truncated collection.
-5. **Load:** the system prompt carries the index, one line per installed expert: ID, summary and the routing keys it is primary for. `load_expert(id)` appends the expert's `analyst.md` and its tools, each with its parameters and summary, with a note on a tool whose capture kind the case lacks, to the conversation as the tool's result, and pins it; a tool an expert the conversation already pinned offers with the same entry is named by ID only, once listed in full in that conversation (`engine.TestCompanionLoadListsToolsOnce`). Several experts may be loaded, and a loaded expert stays for the conversation, a second load saying it is already there. An expert's reference files are offered once an installed expert ships one.
-6. **Consult:** `consult(expert, question)` runs a sub-conversation with the same system prompt, tools and case block and the case updates given since, then the expert's guidance and the question, under the same tool budget; its answer returns as the tool's result and its transcript is kept (`docs/MODEL_API.md`).
+5. **Load:** the system prompt carries the index, one line per installed expert: ID, summary and the routing keys it is primary for. `load_expert(id)` appends the expert's `analyst.md` and its tools, each with its parameters and summary, with a note on a tool whose capture kind the case lacks, to the conversation as the tool's result, and pins it; a tool an expert the conversation already pinned offers with the same entry is named by ID only, once listed in full in that conversation (`engine.TestCompanionLoadListsToolsOnce`). Several experts may be loaded, and a loaded expert stays for the conversation, a second load saying it is already there. When an expert declares `spec.references`, `load_expert` (and `consult`) appends a `## Its references, read with read_reference` section listing each readable reference (within the 64 KiB limit) by `path` and `summary` in manifest order (`engine.TestExpertListsReferences`, `TestReadReferenceRefusals`); an expert with none prints no section. The model reads a reference whole on request with `read_reference(expert, path)`, which reads from the conversation's pinned package snapshot, refuses an expert not loaded in that conversation, an undeclared or escaping path, or a file past the 64 KiB hard limit, and answers a repeat read in the same conversation (across turns or within a batch) by saying it was already read (`engine.TestReadReferencePinnedAndRepeat`, `TestReadReferenceRepeatInTurn`, `TestReadReferenceSameBatch`, `TestReadReferenceRefusals`). A reference is domain guidance, never evidence.
+6. **Consult:** `consult(expert, question)` runs a sub-conversation with the same system prompt, tools and case block and the case updates given since, then the expert's guidance and the question, under the same tool budget, pinning the consulted expert on the consult conversation so it can read that expert's declared references from the pinned snapshot and no other expert's (`engine.TestReadReferenceConsult`); its answer returns as the tool's result and its transcript is kept (`docs/MODEL_API.md`).
 7. **Collect:** the engine runs tests, catalog tools and commands the model calls in its runner with typed parameters (`docs/COLLECTION.md`), and stores each result as evidence.
 8. **Record:** store each loaded expert's pin with its conversation, why it was preloaded, each tool call with who asked, the model used per call, and evidence references.
 
@@ -217,7 +219,7 @@ spec:
 
 The catalog describes a tool's output; the expert explains what it means, because the same output means different things to different experts. The expert's `analyst.md` names each tool it uses by full ID where it explains it. `load_expert` appends the analyst text and the tool's summary, and a result is labelled `<tool ID>@<version>` in its provenance, so the model links the result to its guidance by ID. References are not used for this, since a reference would enter the conversation only when the model asked for it.
 
-An expert whose `analyst.md` does not mention a tool it lists still loads, and the tool is still offered; the loader warns, saying which tool to explain. An expert repository's CI can fail on any loader warning (`compa expert check --fail-on-warning`), so that bundled experts explain every tool they use, while local development is not blocked.
+An expert whose `analyst.md` does not mention a tool it lists (by whole ID) still loads, and the tool is still offered; the loader warns, saying which tool to explain. The same applies to `spec.references`: an expert whose `analyst.md` does not mention a declared reference path as a whole path token, or whose reference file exceeds the 32 KiB soft bound (or the 64 KiB hard limit enforced by `read_reference`), still loads with warnings (`expert.TestLoadReferenceWarnings`). An expert repository's CI can fail on any loader warning (`compa expert check --fail-on-warning`), so that bundled experts explain every tool and reference they use and keep references bounded, while local development is not blocked (`cli_test.TestExpertCheckReferenceWarnings`).
 
 ### Pinning and digests
 
@@ -301,6 +303,8 @@ The tags are group labels, naming each case's area: **[C3]** the conversation lo
 - **[C3]** Load one unchanged expert in a conversation with the fixture provider; the record shows its pin and the model of each call (`engine.TestCompanionConversation`).
 - **[C3]** Preload the primary expert of the case's routing key before the opening turn's first call (`engine.TestCompanionConversation`).
 - **[C3]** Consult an expert: its answer returns as the tool's result, its transcript is kept (`engine.TestCompanionConsult`), and its calls pass the barred-accounts rule and redaction, which run before every call (`companion.TestGateRefuses`, `TestRedactedBeforeEachCall`).
+- **[C4]** Declare references as `{path, summary}` in `v1alpha3`, reject bare strings, missing/long/multi-line summaries, duplicates, `spec.analyst` or package definition paths, empty or non-UTF-8 files, and model/harness names in summaries; warn when unmentioned as a whole path token in `analyst.md` or past 32 KiB / 64 KiB (`schema.TestFixtures`, `expert.TestLoadRejects`, `TestLoadReferenceWarnings`, `cli_test.TestExpertCheckReferenceWarnings`).
+- **[C4]** List readable declared references when an expert loads and omit the section when none exist (or all exceed 64 KiB); read references from the pinned package snapshot without storing evidence, answer repeat reads cleanly across turns or within the same batch, refuse unloaded experts, undeclared or escaping paths, and files past 64 KiB, isolate consult reference reads to the consulted expert, and omit `read_reference` when no installed or pinned expert declares a reference (`engine.TestExpertListsReferences`, `TestReadReferencePinnedAndRepeat`, `TestReadReferenceRepeatInTurn`, `TestReadReferenceSameBatch`, `TestReadReferenceRefusals`, `TestReadReferenceConsult`, `TestReadReferenceAbsentWhenNoneInstalled`, `TestReadReferenceOfferedForPinnedSnapshot`).
 
 ### Shared tool catalogs
 
@@ -327,4 +331,4 @@ Tagged **[TC]**, each with the test that gates it. Every case runs with no model
 
 ## Open decisions
 
-Precedence when routing-key mappings disagree; schema naming/final field definitions; multi-expert conflict and priority semantics; signed release distribution; initial primitive set and risk taxonomy; scope of references and semantic indexing. Resolve through an approved architecture decision rather than implicit implementation.
+Precedence when routing-key mappings disagree; schema naming/final field definitions; multi-expert conflict and priority semantics; signed release distribution; initial primitive set and risk taxonomy; engine-side preloading of references and semantic indexing. Resolve through an approved architecture decision rather than implicit implementation.

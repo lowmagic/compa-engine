@@ -67,10 +67,27 @@
         },
         "references": {
           "type": "array",
+          "description": "Reference files inside the package, read on request with read_reference.",
           "items": {
-            "$ref": "#/$defs/packagePath"
-          },
-          "uniqueItems": true
+            "type": "object",
+            "required": [
+              "path",
+              "summary"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "path": {
+                "$ref": "#/$defs/packagePath"
+              },
+              "summary": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 160,
+                "pattern": "^[^\\n]+$",
+                "description": "One line saying what the reference covers and when to read it."
+              }
+            }
+          }
         },
         "routing": {
           "type": "object",

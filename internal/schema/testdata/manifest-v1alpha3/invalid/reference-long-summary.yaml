@@ -1,0 +1,10 @@
+# want: /spec/references/0/summary: maxLength
+apiVersion: compa.lowmag.cc/expert/v1alpha3
+kind: Expert
+metadata: {id: openshift.networking, version: 0.1.0, summary: Networking expert}
+spec:
+  engineApi: '>=0.2.0 <0.3.0'
+  analyst: analyst.md
+  references:
+    - path: references/ovn.md
+      summary: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx

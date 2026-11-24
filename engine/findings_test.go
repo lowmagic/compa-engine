@@ -142,3 +142,57 @@ func TestUnsourcedCommandFlagged(t *testing.T) {
 		t.Errorf("commands found in no evidence or guidance (-want +got):\n%s", d)
 	}
 }
+
+// TestUnsourcedCommandFromReference: a command in a reference file that
+// was read counts as sourced (including across compaction), while a
+// command in a reference that was only listed when the expert loaded
+// stays flagged as unsourced.
+func TestUnsourcedCommandFromReference(t *testing.T) {
+	td := t.TempDir()
+	writeRefExpert(t, td, "cmds", "fixture.refcmds", "0.1.0",
+		map[string]string{
+			"references/read.md":   "# Read ref\n\nInspect sync with `ovn-nbctl --no-leader-only show`.\n",
+			"references/unread.md": "# Unread ref\n\nInspect tunnels with `ovn-sbctl --columns=chassis list Encap`.\n",
+		},
+		map[string]string{
+			"references/read.md":   "NB commands",
+			"references/unread.md": "SB commands",
+		},
+		"Check `references/read.md` and `references/unread.md`.\n",
+	)
+	s, _ := companionSession(t, script(
+		modelfixture.Calling(call("c1", "load_expert", map[string]any{"id": "fixture.refcmds"})),
+		modelfixture.Calling(call("c2", readReferenceTool, map[string]any{"expert": "fixture.refcmds", "path": "references/read.md"})),
+		modelfixture.Text("Read."),
+		modelfixture.Text("Handoff: checked."),
+	), td)
+	s.e.config.Checks.Commands = []string{"ovn-nbctl", "ovn-sbctl"}
+	ctx := context.Background()
+	if _, err := s.Talk(ctx, "How do I check OVN?", nil); err != nil {
+		t.Fatal(err)
+	}
+	answer := strings.Join([]string{
+		"Check `ovn-nbctl --no-leader-only show` first.",
+		"",
+		"Or check `ovn-sbctl --columns=chassis list Encap`.",
+	}, "\n")
+	checkAnswer := func(when string) {
+		t.Helper()
+		flags, err := s.AnswerFlags(ctx, []string{answer})
+		if err != nil {
+			t.Fatal(err)
+		}
+		const where = " of the evidence this conversation saw or of the guidance of an expert it loaded"
+		want := []string{
+			"`ovn-sbctl --columns=chassis list Encap` · `ovn-sbctl` is on no line" + where + " · Or check `ovn-sbctl --columns=chassis list Encap`.",
+		}
+		if d := cmp.Diff(want, readingFlags(t, flags[0], FindingCommand)); d != "" {
+			t.Errorf("%s: commands found in no evidence or guidance (-want +got):\n%s", when, d)
+		}
+	}
+	checkAnswer("before compaction")
+	if _, err := s.Compact(ctx, nil); err != nil {
+		t.Fatal(err)
+	}
+	checkAnswer("after compaction")
+}

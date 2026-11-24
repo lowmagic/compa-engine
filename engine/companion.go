@@ -147,7 +147,7 @@ func (s *Session) loop(ctx context.Context) (*companion.Loop, error) {
 		return nil, err
 	}
 	d := p.Describe()
-	l := s.storeLoop()
+	l := s.storeLoop(ctx)
 	l.Provider, l.Model, l.Effort = p, pc.Model, pc.Effort
 	l.Gate = e.companionGate(c, d.EgressClass)
 	l.Policy = redact.For(d.EgressClass)
@@ -159,12 +159,12 @@ func (s *Session) loop(ctx context.Context) (*companion.Loop, error) {
 
 // storeLoop is the companion's loop without a model: enough to estimate
 // a conversation and to begin one, which call none.
-func (s *Session) storeLoop() *companion.Loop {
+func (s *Session) storeLoop(ctx context.Context) *companion.Loop {
 	c := s.c
 	return &companion.Loop{
 		Store:       companion.Store{DB: c.st.DB()},
 		System:      s.e.companionSystem(),
-		Tools:       s.e.companionTools(c),
+		Tools:       s.e.companionTools(ctx, c),
 		SupportName: s.SupportName(),
 		CaseBlock: func(context.Context) (string, []companion.Shown, error) {
 			return caseBlock(c, s.inventory(), s.SupportName())

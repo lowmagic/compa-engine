@@ -32,7 +32,8 @@ CaseSource / ArtifactSource (passed by the deployment) / engineer shell (!, comp
         |      Tools, validated by the engine:
         |        primitives, run_tool, command  ->  runner / sandbox
         |        evidence tools                 ->  case store
-        |        load_expert, consult           ->  expert loader / sub-conversation
+        |        load_expert, read_reference    ->  expert loader
+        |        consult                        ->  sub-conversation
         |        <service>_search, _fetch       ->  ReferenceAdapter
         |      collections and lookups stored as evidence
         |
@@ -73,7 +74,7 @@ Because experts declare guidance and tools rather than providers or model IDs, t
 
 ## Expert boundary
 
-The engine implements the versioned Expert API defined in `docs/EXPERT_API.md`. External packages declare domain knowledge, a one-line summary, routing signals and investigative tests composed from engine primitives and declared binaries. The engine validates, resolves and pins packages before using them, and runs their tests in its sandboxed runner. Every installed expert is listed in the system prompt's index; `load_expert` appends one expert's guidance to the conversation and pins it there, and `consult` asks one expert one question in a sub-conversation. Experts cannot access stores directly or name a provider or a model; the only code they may ship is an optional MCP server the engine runs sandboxed. Distribution defaults to a tested bundled set, with local overrides and optional exact-version downloads; no network dependency at runtime.
+The engine implements the versioned Expert API defined in `docs/EXPERT_API.md`. External packages declare domain knowledge, a one-line summary, routing signals and investigative tests composed from engine primitives and declared binaries. The engine validates, resolves and pins packages before using them, and runs their tests in its sandboxed runner. Every installed expert is listed in the system prompt's index; `load_expert` appends one expert's guidance (and lists any declared reference files) to the conversation and pins it there, `read_reference` reads a declared reference file from the conversation's pinned package as domain guidance, and `consult` asks one expert one question in a sub-conversation. Experts cannot access stores directly or name a provider or a model; the only code they may ship is an optional MCP server the engine runs sandboxed. Distribution defaults to a tested bundled set, with local overrides and optional exact-version downloads; no network dependency at runtime.
 
 ## Sources
 

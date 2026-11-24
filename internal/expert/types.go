@@ -24,10 +24,17 @@ type Metadata struct {
 	Description string `json:"description,omitempty"`
 }
 
+// Reference is a package-local reference document an expert declares,
+// read on request with read_reference (docs/EXPERT_API.md).
+type Reference struct {
+	Path    string `json:"path"`
+	Summary string `json:"summary"`
+}
+
 type Spec struct {
 	EngineAPI  string       `json:"engineApi"`
 	Analyst    string       `json:"analyst"`
-	References []string     `json:"references,omitempty"`
+	References []Reference  `json:"references,omitempty"`
 	Routing    Routing      `json:"routing"`
 	Tests      []string     `json:"tests,omitempty"`
 	Catalogs   []CatalogRef `json:"catalogs,omitempty"`

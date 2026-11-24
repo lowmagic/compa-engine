@@ -6,10 +6,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"path"
 	"regexp"
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/lowmagic/compa-engine/engine/text"
@@ -57,7 +59,7 @@ type toolkit struct {
 
 // companionTools is the case's tool table, in its fixed order, each tool
 // that returns evidence declaring its call's question (frame).
-func (e *Engine) companionTools(c *openCase) []companion.Tool {
+func (e *Engine) companionTools(ctx context.Context, c *openCase) []companion.Tool {
 	k := toolkit{e: e, c: c}
 	var out []companion.Tool
 	for _, p := range primitiveTools {
@@ -65,7 +67,11 @@ func (e *Engine) companionTools(c *openCase) []companion.Tool {
 	}
 	out = append(out, k.command(), k.runTool(), k.describeTool())
 	out = append(out, k.evidenceTools()...)
-	out = append(out, k.loadExpert(), k.consult())
+	out = append(out, k.loadExpert())
+	if e.hasReferences(ctx, c) {
+		out = append(out, k.readReference())
+	}
+	out = append(out, k.consult())
 	out = append(out, k.lookups()...)
 	for i, tl := range out {
 		out[i] = frame(tl)
@@ -677,13 +683,46 @@ func (k toolkit) resolveExpert(ctx context.Context, conv, id string) (expert.Res
 // expertHeading begins an expert's guidance, before its ID and version.
 const expertHeading = "# Expert "
 
+const (
+	readReferenceTool = "read_reference"
+	referenceHeading  = "# Reference "
+)
+
+func (e *Engine) hasReferences(ctx context.Context, c *openCase) bool {
+	idx := e.experts().idx
+	for _, d := range e.installedExperts() {
+		if entry, ok := idx.Describe(d.ID, d.Version); ok && len(entry.Manifest.Spec.References) > 0 {
+			return true
+		}
+	}
+	if c == nil || c.st == nil {
+		return false
+	}
+	conv, err := (companion.Store{DB: c.st.DB()}).Latest(ctx)
+	if err != nil {
+		return false
+	}
+	snap := e.snapshots(c)
+	for _, raw := range conv.Pins {
+		var pin expert.Pin
+		if err := json.Unmarshal(raw, &pin); err != nil {
+			continue
+		}
+		if r, _, err := idx.Pinned(pin, snap); err == nil && len(r.Manifest.Spec.References) > 0 {
+			return true
+		}
+	}
+	return false
+}
+
 // expertGuidance is an expert's guidance as load_expert and a consult
 // give it: its analyst text, then its own tests and its catalogs' tools at
 // the versions resolved, sorted by ID, each with its parameters and by its
 // one-line summary, or its description's first sentence, with a note on a
-// tool whose capture kind the case lacks. A tool listed already in the
-// conversation, by the same line, is named by ID only, on one line; one
-// whose line differs, as a catalog tool at another version may, is listed.
+// tool whose capture kind the case lacks; then its declared references,
+// each with its summary. A tool listed already in the conversation, by the
+// same line, is named by ID only, on one line; one whose line differs, as
+// a catalog tool at another version may, is listed.
 func (k toolkit) expertGuidance(r expert.Resolved, listed map[string]string) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, expertHeading+"%s %s\n\n%s\n", r.ID(), r.Version(), strings.TrimSpace(r.Analyst))
@@ -717,6 +756,18 @@ func (k toolkit) expertGuidance(r expert.Resolved, listed map[string]string) str
 			fmt.Fprintf(&b, "Also uses, listed above: %s.\n", strings.Join(seen, ", "))
 		}
 	}
+	var servable []expert.Reference
+	for _, ref := range r.Manifest.Spec.References {
+		if len(r.References[ref.Path]) <= expert.ReferenceMaxBytes {
+			servable = append(servable, ref)
+		}
+	}
+	if len(servable) > 0 {
+		b.WriteString("\n## Its references, read with read_reference\n\n")
+		for _, ref := range servable {
+			fmt.Fprintf(&b, "- `%s`: %s\n", ref.Path, strings.Join(strings.Fields(ref.Summary), " "))
+		}
+	}
 	for _, w := range r.Warnings {
 		fmt.Fprintf(&b, "\nNote: %s\n", w)
 	}
@@ -726,6 +777,99 @@ func (k toolkit) expertGuidance(r expert.Resolved, listed map[string]string) str
 // toolLine is how guidance lists a tool, before any capture note.
 func toolLine(t expert.Test) string {
 	return fmt.Sprintf("- `%s`: %s", signature(t), strings.Join(strings.Fields(oneLine(t)), " "))
+}
+
+func refHeading(id, version, refPath string) string {
+	return referenceHeading + id + " " + version + " " + refPath + "\n"
+}
+
+func (k toolkit) referenceAlreadyRead(ctx context.Context, conv, id, version, refPath string) (bool, error) {
+	msgs, err := (companion.Store{DB: k.c.st.DB()}).Messages(ctx, conv)
+	if err != nil {
+		return false, err
+	}
+	head := refHeading(id, version, refPath)
+	for _, m := range msgs {
+		if m.Kind != companion.KindResults {
+			continue
+		}
+		for _, res := range m.Results {
+			if res.Name == readReferenceTool && !res.IsError && strings.HasPrefix(res.Text, head) {
+				return true, nil
+			}
+		}
+	}
+	return false, nil
+}
+
+func (k toolkit) readReference() companion.Tool {
+	props := map[string]any{
+		"expert": strProp("The loaded expert's ID."),
+		"path":   strProp("The reference path, as the expert's guidance lists it."),
+	}
+	type refKey struct{ conv, id, version, path string }
+	var mu sync.Mutex
+	seen := map[refKey]bool{}
+	return tool{
+		decl: model.Tool{
+			Name:        readReferenceTool,
+			Description: "Read a reference file declared by a loaded expert, by expert ID and path as listed when the expert loaded. Returns domain guidance, not evidence.",
+			Parameters:  schema(props, []string{"expert", "path"}, false),
+		},
+		run: func(ctx context.Context, c companion.Call) companion.Result {
+			expertID, _ := c.Args["expert"].(string)
+			refPath, _ := c.Args["path"].(string)
+			if strings.TrimSpace(expertID) == "" || strings.TrimSpace(refPath) == "" {
+				return refused("read_reference: expert and path are required")
+			}
+			clean := path.Clean(refPath)
+			if path.IsAbs(refPath) || strings.Contains(refPath, "\\") || clean == ".." || strings.HasPrefix(clean, "../") {
+				return refused("read_reference %s: path %q escapes the package", expertID, refPath)
+			}
+			pins, err := k.pins(ctx, c.Conversation, false)
+			if err != nil {
+				return refused("read_reference %s: %v", expertID, err)
+			}
+			var pin expert.Pin
+			found := false
+			for _, p := range pins {
+				if p.ID == expertID {
+					pin, found = p, true
+					break
+				}
+			}
+			if !found {
+				return refused("read_reference: expert %q is not loaded in this conversation", expertID)
+			}
+			r, _, err := k.e.experts().idx.Pinned(pin, k.e.snapshots(k.c))
+			if err != nil {
+				return refused("read_reference %s: %v", expertID, err)
+			}
+			body, ok := r.References[refPath]
+			if !ok {
+				return refused("read_reference %s: %q is not a declared reference", expertID, refPath)
+			}
+			if len(body) > expert.ReferenceMaxBytes {
+				return refused("read_reference %s %s: %d bytes exceeds the %d-byte limit", expertID, refPath, len(body), expert.ReferenceMaxBytes)
+			}
+			mu.Lock()
+			key := refKey{conv: c.Conversation, id: r.ID(), version: r.Version(), path: refPath}
+			already := seen[key]
+			if !already {
+				already, err = k.referenceAlreadyRead(ctx, c.Conversation, r.ID(), r.Version(), refPath)
+				if err != nil {
+					mu.Unlock()
+					return refused("read_reference %s: %v", expertID, err)
+				}
+				seen[key] = true
+			}
+			mu.Unlock()
+			if already {
+				return companion.Result{Text: fmt.Sprintf("%s %s was already read in this conversation; its text is above.", expertID, refPath)}
+			}
+			return companion.Result{Text: refHeading(r.ID(), r.Version(), refPath) + "\n" + strings.TrimSpace(body) + "\n"}
+		},
+	}
 }
 
 func (k toolkit) loadExpert() companion.Tool {
@@ -847,8 +991,12 @@ func (k toolkit) consult() companion.Tool {
 			if err != nil {
 				return refused("consult %s: %v", id, err)
 			}
+			pin, err := json.Marshal(r.Pin())
+			if err != nil {
+				return refused("consult %s: %v", id, err)
+			}
 			g := k.expertGuidance(r, nil)
-			answer, err := c.Consult(ctx, id, g, q)
+			answer, err := c.Consult(ctx, id, g, q, pin)
 			if err != nil {
 				return refused("consult %s did not finish: %v", id, err)
 			}
