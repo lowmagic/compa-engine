@@ -8,7 +8,9 @@ metadata:
 spec:
   engineApi: '>=0.2.0 <0.3.0'
   analyst: analyst.md
-  references: [references/ovn.md]
+  references:
+    - path: references/ovn.md
+      summary: OVN-Kubernetes flow tables and packet-trace notes
   routing:
     keys: [openshift-networking, {id: openshift, relationship: secondary}]
     signals:

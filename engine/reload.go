@@ -62,7 +62,7 @@ func (s *Session) ReloadOffer(ctx context.Context) (ReloadOffer, error) {
 	if err != nil {
 		return o, err
 	}
-	if o.Estimate, err = s.storeLoop().Estimate(ctx, conv.ID); err != nil {
+	if o.Estimate, err = s.storeLoop(ctx).Estimate(ctx, conv.ID); err != nil {
 		return o, err
 	}
 	history, err := s.ConversationHistory(ctx)
@@ -115,7 +115,7 @@ func (s *Session) Reload(ctx context.Context, mode ReloadMode, on func(TalkEvent
 		return out, err
 	}
 	out.Conversation = conv.ID
-	l := s.storeLoop()
+	l := s.storeLoop(ctx)
 	if mode == ReloadFull {
 		out.Estimate, err = l.Estimate(ctx, conv.ID)
 		return out, err

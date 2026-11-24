@@ -380,7 +380,7 @@ func (s *Session) reopenState(ctx context.Context) (ReopenState, []string, bool,
 	}
 	r.CacheLifetime = s.cacheLifetime()
 	r.CacheExpired = r.CacheLifetime > 0 && !r.LastCall.IsZero() && s.c.now().Sub(r.LastCall) > r.CacheLifetime
-	if r.Estimate, err = s.storeLoop().Estimate(ctx, conv.ID); err != nil {
+	if r.Estimate, err = s.storeLoop(ctx).Estimate(ctx, conv.ID); err != nil {
 		return r, nil, true, err
 	}
 	r.Large = r.Estimate > reopenLarge

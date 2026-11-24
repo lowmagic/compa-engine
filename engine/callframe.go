@@ -33,9 +33,10 @@ const (
 
 // TakesQuestion says whether a tool of the companion's table takes a
 // question: every one that returns evidence, so all but load_expert,
-// describe_tool and consult, whose own question is the consult's.
+// read_reference, describe_tool and consult, whose own question is the
+// consult's.
 func TakesQuestion(name string) bool {
-	return name != "load_expert" && name != "describe_tool" && name != consultTool
+	return name != "load_expert" && name != readReferenceTool && name != "describe_tool" && name != consultTool
 }
 
 // framed is a tool of the companion's table with its call's frame

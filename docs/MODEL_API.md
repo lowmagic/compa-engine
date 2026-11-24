@@ -182,20 +182,23 @@ Declared once, statically, in this order, and offered on every call.
 | `run_tool` | Any installed catalog tool or expert test, by ID, with its parameters | the runner |
 | `describe_tool` | A catalog tool's or test's full description and parameter schema | the engine |
 | `evidence_list`, `evidence_read`, `evidence_grep` | The stored evidence by short name (`docs/COLLECTION.md` §Evidence tools); `evidence_read` also reads a comment whole | the engine |
-| `load_expert` | One expert's guidance and its tools, each on one line with its parameters (required ones marked) and summary, appended as the result, the expert pinned | the engine |
+| `load_expert` | One expert's guidance, its tools (each on one line with its parameters, required ones marked, and summary), and its declared references (path and summary), appended as the result, the expert pinned | the engine |
+| `read_reference` | One declared reference file of an expert loaded in this conversation, by expert ID and path, returned as domain guidance (not evidence) | the engine |
 | `consult` | One expert, one question, as a sub-conversation (§The conversation) | the loop |
 | `<service>_search`, `<service>_fetch` | The operations of each reference adapter the deployment passes, as its offer gives them: `kcs_search` and `kcs_fetch` for a service `kcs` | the adapter |
 
 A function name is the tool's name; a catalog tool or test is named by its ID as `run_tool`'s parameter, so no ID is
-written into a function name. The expert index is in the system prompt, so no tool lists experts; an expert's
-reference files are offered once an installed expert ships one.
+written into a function name. The expert index is in the system prompt, so no tool lists experts; `read_reference` is
+offered on every call when at least one installed expert or a conversation's pinned expert declares a reference, and
+omitted when none does (`engine.TestReadReferenceAbsentWhenNoneInstalled`,
+`TestReadReferenceOfferedForPinnedSnapshot`).
 
 - **Validation before running.** Each call is checked before it runs: the tool exists, its parameters validate against
   its schema, a command's binary and arguments pass the allowlist and its argument rules, a `run_tool` ID names an
   installed tool or test whose parameters accept what was given. A call that fails is not run; its result is the
   refusal and its reason, and the turn goes on.
 - **The question.** Every tool that returns evidence — the primitives, `command`, `run_tool`, the evidence tools and
-  each reference service's tools, all but `load_expert`, `describe_tool` and `consult`, whose own question is the
+  each reference service's tools, all but `load_expert`, `read_reference`, `describe_tool` and `consult`, whose own question is the
   consult's — declares a required `question`, one line of a bounded length ending in `?`: what the call should settle,
   whose answer would change what the model does or concludes next, not a description of the call. The
   engine takes it out of the arguments before the call is validated and run, so no runner, catalog tool or argument
@@ -383,8 +386,9 @@ without it.
     comment or blank line skipped — whose
     program, or one of whose options (each word beginning with `-`, a value after `=` taken off), is on no one line,
     as a word, of the lines the conversation was shown, read as the span search reads them, or of the guidance of an
-    expert the conversation loaded; the finding names the program or the options not found
-    (`check.TestCommandLines`, `engine.TestUnsourcedCommandFlagged`). The values a command takes — names, paths,
+    expert the conversation loaded or a reference it read (across compaction too; a reference only listed does not count);
+    the finding names the program or the options not found
+    (`check.TestCommandLines`, `engine.TestUnsourcedCommandFlagged`, `engine.TestUnsourcedCommandFromReference`). The values a command takes — names, paths,
     times — are not looked for.
 - **The engineer's review of the findings.** Beneath an answer the chat prints no finding itself. One yellow line
   counts them all — each citation flagged, each citation not in the form read, each span flag, arithmetic included,
@@ -855,13 +859,16 @@ conversation made (`engine.TestTrajectoryCountsTheOpening`). Its token figures a
 cache-read counts as its record holds them, never invented: a sum over calls with no count is a floor naming how many
 were unavailable. Beside them each call's cache outcome as its record holds it: made, reused, a make refused with the
 first line of the provider's error, under the minimum, no break, or none recorded (`engine.TestTrajectoryCacheOutcomes`).
-Each turn also gives the expert guidance its conversation held — each `load_expert` result and the
-preload, by expert ID and version, with its tokens by the engine's estimator, labelled with the estimator's version —
-what its model calls in that conversation sent of it, each counting what was loaded before it, and that as a share of
-those calls' whole input as the provider reported it, uncached, cache read and cache write where the provider has it;
-the share is `unavailable` where any of those calls' input was not reported, never a share of the rest. A consult's
-guidance, its ask's and any it loads, is given apart, and a conversation a compaction starts holds none until it loads
-it again (`engine.TestTrajectoryGuidance`, `TestTrajectoryGuidanceUnreported`, `TestTrajectoryGuidanceAfterCompaction`).
+Each turn also gives the expert guidance its conversation held — each `load_expert` result, each `read_reference` result
+(the reads themselves also recorded per turn and per consult by expert, path, refusal status, and whether it repeated
+an earlier read, and first reads counted in totals; token accounting deduplicates references across the conversation)
+and the preload, by expert ID and version, with its tokens by the engine's estimator, labelled with the estimator's
+version — what its model calls in that conversation sent of it, each counting what was loaded before it, and that as a
+share of those calls' whole input as the provider reported it, uncached, cache read and cache write where the provider
+has it; the share is `unavailable` where any of those calls' input was not reported, never a share of the rest. A
+consult's guidance, its ask's and any it loads or reads, is given apart, and a conversation a compaction starts holds
+none until it loads or reads it again (`engine.TestTrajectoryGuidance`, `TestTrajectoryGuidanceUnreported`,
+`TestTrajectoryGuidanceAfterCompaction`, `TestTrajectoryReferences`).
 The editor's kept check of a turn's answer gives its anchors, whether it was revised, and the citations with lines and
 of whole items the revision added (`engine.TestTrajectoryKeepsTheCheck`). A case with no
 conversation has a trajectory with no turns (`engine.TestTrajectoryOfNoConversation`,
@@ -929,13 +936,21 @@ checks.
 - **[C3]** A collection's result is stored as evidence and returned under its short name, which resolves to the
   stored item (`engine.TestCompanionConversation`); every tool's parameter schema uses only keywords both providers
   accepted live (`engine.TestCompanionToolKeywords`).
-- **[C3]** Every tool returning evidence declares a required question, `load_expert` and `describe_tool` none, and
+- **[C3]** Every tool returning evidence declares a required question, `load_expert`, `read_reference` and `describe_tool` none, and
   `consult` only its own; the engine takes it out before the call is validated and run, the stored call keeping
   it as written, a call without one run (`engine.TestToolsDeclareTheQuestion`, `TestQuestionTakenOutBeforeTheCallRuns`);
   the trajectory reports each, the calls with none, repeated, vague or restating the action, and compares calls by
   what ran (`engine.TestTrajectoryQuestions`, `TestRestatesAction`); the chat's tool line gives each call's own, in the
   order made, a row for each call where the batch is wider than the terminal, each cut to the width, live and
   reopened, and `/debug` whole (`chat.TestToolLineShowsTheQuestion`, `TestBatchedToolLineGivesEachCallItsQuestion`).
+- **[C3]** Reference files listed on expert load are read on request with `read_reference` from the conversation's pinned
+  snapshot without storing evidence or disclosure, answer repeat reads cleanly across turns or within the same batch,
+  refuse unloaded experts, undeclared or escaping paths, and files past 64 KiB, stay isolated per consult, omit
+  `read_reference` when no installed or pinned expert declares a reference (and offer it when a pinned snapshot has one),
+  redact secrets before egress, and appear in the trajectory (`engine.TestExpertListsReferences`,
+  `TestReadReferencePinnedAndRepeat`, `TestReadReferenceRepeatInTurn`, `TestReadReferenceSameBatch`,
+  `TestReadReferenceRefusals`, `TestReadReferenceConsult`, `TestReadReferenceAbsentWhenNoneInstalled`,
+  `TestReadReferenceOfferedForPinnedSnapshot`, `TestReadReferenceRedacted`, `TestTrajectoryReferences`).
 - **[C3]** Any tool declares optional answers, taken out before the call runs and kept in the stored call
   (`engine.TestAnswersDeclaredAndTakenOut`); an answer naming no item a tool returned before it, or no item's name, is
   flagged, and its code spans are searched for in that item's lines shown, flagged where none holds them, arithmetic
@@ -1090,11 +1105,12 @@ checks.
   schema (`check.TestDeclMatchesSchema`).
 - **[E1]** A draft for the customer is asked with the certainty review, an internal note without it
   (`engine.TestCustomerDraftCarriesCertaintyReview`).
-- **[E1]** Causal wording in the model's own voice and a command found in no evidence or guidance are findings for
+- **[E1]** Causal wording in the model's own voice and a command found in no evidence or guidance (including references read in the conversation) are findings for
   reading, counted beneath the answer, which is unchanged; a question, a condition, a named source's conclusion and
   a causal lead offered as a possibility are not causal wording, a root cause and a likelihood are wherever they
   stand, and a command's values are not looked for (`check.TestCausalTerms`,
-  `check.TestCommandLines`, `engine.TestCausalWordingFlagged`, `engine.TestUnsourcedCommandFlagged`).
+  `check.TestCommandLines`, `engine.TestCausalWordingFlagged`, `engine.TestUnsourcedCommandFlagged`,
+  `engine.TestUnsourcedCommandFromReference`).
 - **[E2]** The findings schema's roles hold: an anchor and a correction are the editor's, an alternative and a
   discriminator the reviewer's, an anchor says what fulfils it (`check.TestValidateRoles`); the certainty candidate
   takes own-voice certainty and causal wording, not a named source's (`check.TestCertaintyTerms`,

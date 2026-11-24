@@ -353,3 +353,24 @@ Done when: `make check` passes; `engine.TestIngestServer` verifies the socket's 
 and closing; `cli.TestParseIn` and `TestIngestIntoAHeldCase` verify both forms of `compa in` and reaching a held
 case; `chat.TestShellOpensWithCompaIn` verifies the banner, the environment, the refusal, the list and the next
 message.
+
+## 23. Expert reference files, read on request
+
+Status: done
+
+An expert can declare reference files (`{path, summary}`) in `spec.references` for lookup material that does not belong
+in every conversation's `analyst.md`. Loading the expert lists them with their summaries, and `read_reference` reads a
+declared reference whole from the conversation's pinned package snapshot as domain guidance (not evidence) — offered
+only when an installed expert declares a reference, isolated per consult, bounded by a 32 KiB soft warning in
+`compa expert check` and a 64 KiB hard refusal, redacted on egress, counted in the command check across compaction, and
+recorded in the trajectory.
+
+Delivers: The companion, Expert packages.
+
+Done when: `make check` passes; `expert.TestLoadRejects`, `TestLoadReferenceWarnings`, and
+`cli_test.TestExpertCheckReferenceWarnings` verify validation and bounds; `engine.TestExpertListsReferences`,
+`TestReadReferencePinnedAndRepeat`, `TestReadReferenceRepeatInTurn`, `TestReadReferenceSameBatch`,
+`TestReadReferenceRefusals`, `TestReadReferenceConsult`, `TestReadReferenceAbsentWhenNoneInstalled`,
+`TestReadReferenceOfferedForPinnedSnapshot`, `TestReadReferenceRedacted`, `TestUnsourcedCommandFromReference`, and
+`TestTrajectoryReferences` verify runtime behavior, command checks, and trajectory; and
+`chat.TestReadReferenceLabels` verifies the chat's status and tool-line labels.

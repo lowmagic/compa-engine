@@ -384,7 +384,7 @@ func TestCompanionToolKeywords(t *testing.T) {
 			accepted[k] = true
 		}
 	}
-	tools := s.e.companionTools(s.c)
+	tools := s.e.companionTools(context.Background(), s.c)
 	var names []string
 	for _, tl := range tools {
 		d := tl.Decl()

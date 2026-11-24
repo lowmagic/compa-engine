@@ -495,8 +495,9 @@ func (cs *commandSearch) why(k int) string {
 
 // loadedGuidance is the guidance of each expert the case's current
 // conversation, or one it was compacted from, loaded, as load_expert gave
-// it (expertGuidance), each pin once: the experts it loaded, not those
-// its consults were given.
+// it (expertGuidance), each pin once, plus any reference read with
+// read_reference in those conversations: the main conversation's own
+// loaded guidance and read references, not those its consults read.
 func (s *Session) loadedGuidance(ctx context.Context) ([]string, error) {
 	st := companion.Store{DB: s.c.st.DB()}
 	conv, err := st.Latest(ctx)
@@ -524,6 +525,20 @@ func (s *Session) loadedGuidance(ctx context.Context) ([]string, error) {
 				return nil, err
 			}
 			out = append(out, k.expertGuidance(r, nil))
+		}
+		msgs, err := st.Messages(ctx, c.ID)
+		if err != nil {
+			return nil, err
+		}
+		for _, m := range msgs {
+			if m.Kind != companion.KindResults {
+				continue
+			}
+			for _, res := range m.Results {
+				if res.Name == readReferenceTool && !res.IsError && strings.HasPrefix(res.Text, referenceHeading) {
+					out = append(out, res.Text)
+				}
+			}
 		}
 		if c.CompactedFrom == "" {
 			return out, nil

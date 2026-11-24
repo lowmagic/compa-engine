@@ -25,13 +25,13 @@ func TestToolsDeclareTheQuestion(t *testing.T) {
 		t.Error("the prompt does not ask for each call's question")
 	}
 	s.e.references = map[string]ReferenceAdapter{"kcs": &fakeReferences{id: "kcs"}}
-	for _, tl := range s.e.companionTools(s.c) {
+	for _, tl := range s.e.companionTools(context.Background(), s.c) {
 		d := tl.Decl()
 		props, _ := d.Parameters["properties"].(map[string]any)
 		required, _ := d.Parameters["required"].([]any)
 		q, declared := props[questionArg].(map[string]any)
 		switch d.Name {
-		case "load_expert", "describe_tool":
+		case "load_expert", readReferenceTool, "describe_tool":
 			if declared {
 				t.Errorf("%s declares a question", d.Name)
 			}
@@ -264,7 +264,7 @@ func TestAnswersDeclaredAndTakenOut(t *testing.T) {
 	if !strings.Contains(s.e.companionSystem(), "`answers`") {
 		t.Error("the prompt does not say what answers are for")
 	}
-	for _, tl := range s.e.companionTools(s.c) {
+	for _, tl := range s.e.companionTools(context.Background(), s.c) {
 		d := tl.Decl()
 		props, _ := d.Parameters["properties"].(map[string]any)
 		required, _ := d.Parameters["required"].([]any)

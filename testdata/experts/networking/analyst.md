@@ -10,3 +10,5 @@ Restarts on one node point to node-local state before a cluster-wide cause.
 ## ovn-errors
 
 Historical errors do not explain current impact without identity and timing agreement.
+
+See `references/ovn.md` for OVN-Kubernetes reference notes.

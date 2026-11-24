@@ -56,9 +56,10 @@ type TrajectoryTurn struct {
 	Evidence    TrajectoryEvidence `json:"evidence"`
 	// Repeated are the calls naming the tool and the arguments of a call
 	// made earlier in the main history, the engine's included.
-	Repeated []RepeatedCall `json:"repeated,omitempty"`
-	Experts  []ExpertLoad   `json:"experts,omitempty"`
-	Consults []ConsultRun   `json:"consults,omitempty"`
+	Repeated   []RepeatedCall  `json:"repeated,omitempty"`
+	Experts    []ExpertLoad    `json:"experts,omitempty"`
+	References []ReferenceRead `json:"references,omitempty"`
+	Consults   []ConsultRun    `json:"consults,omitempty"`
 	// Asked are the turn's calls in the main conversation to a tool that
 	// takes a question, each with it as written, and Questions their
 	// counts; a question is reported as it is, never corrected.
@@ -155,6 +156,15 @@ type ExpertLoad struct {
 	Refused  bool   `json:"refused,omitempty"`
 }
 
+// ReferenceRead is one read_reference call: the expert, the path asked
+// for, and whether it was refused or repeated an earlier read.
+type ReferenceRead struct {
+	Expert   string `json:"expert"`
+	Path     string `json:"path"`
+	Refused  bool   `json:"refused,omitempty"`
+	Repeated bool   `json:"repeated,omitempty"`
+}
+
 // ConsultRun is one consult call: the expert, the consult's conversation
 // (none where it was refused before it ran), whether it was refused or
 // failed, the tool calls the consult made, how many of those repeat the
@@ -162,21 +172,23 @@ type ExpertLoad struct {
 // response that asked for the consult, and the guidance the consult's
 // model calls sent: its ask's, then any it loaded.
 type ConsultRun struct {
-	Expert       string         `json:"expert"`
-	Conversation string         `json:"conversation,omitempty"`
-	Refused      bool           `json:"refused,omitempty"`
-	Calls        int            `json:"calls"`
-	Repeats      int            `json:"repeats"`
-	Guidance     *GuidanceShare `json:"guidance,omitempty"`
+	Expert       string          `json:"expert"`
+	Conversation string          `json:"conversation,omitempty"`
+	Refused      bool            `json:"refused,omitempty"`
+	Calls        int             `json:"calls"`
+	Repeats      int             `json:"repeats"`
+	References   []ReferenceRead `json:"references,omitempty"`
+	Guidance     *GuidanceShare  `json:"guidance,omitempty"`
 }
 
 // GuidanceLoad is one expert's guidance as a conversation was given it —
-// by load_expert, the engine's preload or a consult's ask — by the expert
-// and the version its heading names, with its tokens by the engine's
-// estimator.
+// by load_expert, read_reference, the engine's preload or a consult's ask —
+// by the expert, the version its heading names, and for a reference its
+// path, with its tokens by the engine's estimator.
 type GuidanceLoad struct {
 	ID      string      `json:"id"`
 	Version string      `json:"version"`
+	Path    string      `json:"path,omitempty"`
 	Tokens  model.Count `json:"tokens"`
 }
 
@@ -322,9 +334,11 @@ type TrajectoryTotals struct {
 	Answers        int `json:"answers"`
 	FlaggedAnswers int `json:"flagged_answers"`
 	// Loaded counts the experts loaded, ByEngine those the engine loaded;
-	// refused loads are in neither.
+	// References counts non-refused, first-read main-conversation
+	// read_reference calls; refused loads are in neither.
 	Loaded         int      `json:"experts_loaded"`
 	ByEngine       int      `json:"experts_by_engine"`
+	References     int      `json:"references_read"`
 	Consults       int      `json:"consults"`
 	ConsultCalls   int      `json:"consult_calls"`
 	ConsultRepeats int      `json:"consult_repeats"`
@@ -384,13 +398,14 @@ var evidenceReadTool = strings.ReplaceAll(toolRead, ".", "_")
 // loaded itself, its ask's added once matched; used once matched to its
 // call.
 type consultRow struct {
-	conv     companion.Conversation
-	question string
-	keys     []string
-	models   []ModelCallTokens
-	budget   bool
-	guidance guidanceTally
-	used     bool
+	conv       companion.Conversation
+	question   string
+	keys       []string
+	models     []ModelCallTokens
+	budget     bool
+	guidance   guidanceTally
+	references []ReferenceRead
+	used       bool
 }
 
 // guidanceTally is the guidance some model calls of one conversation
@@ -438,14 +453,14 @@ func (g guidanceTally) share() GuidanceShare {
 	return out
 }
 
-// sumGuidance is shares together: each expert at each version once, at
-// its largest, and the calls' figures summed, the input unavailable where
-// any call's was.
+// sumGuidance is shares together: each expert and reference at each
+// version once, at its largest, and the calls' figures summed, the input
+// unavailable where any call's was.
 func sumGuidance(shares []GuidanceShare) GuidanceShare {
 	var g guidanceTally
 	for _, s := range shares {
 		for _, x := range s.Experts {
-			i := slices.IndexFunc(g.experts, func(y GuidanceLoad) bool { return y.ID == x.ID && y.Version == x.Version })
+			i := slices.IndexFunc(g.experts, func(y GuidanceLoad) bool { return y.ID == x.ID && y.Version == x.Version && y.Path == x.Path })
 			switch {
 			case i < 0:
 				g.experts = append(g.experts, x)
@@ -494,6 +509,27 @@ func guidanceOf(g string) (GuidanceLoad, bool) {
 	return GuidanceLoad{ID: id, Version: version, Tokens: model.Estimated(model.EstimateTokens(g), model.EstimatorVersion)}, true
 }
 
+// referenceGuidanceOf is the expert reference g is, as read_reference wrote it,
+// by the expert, version and path its heading names, with its estimated tokens;
+// false for any other text, as read_reference's word that the reference was
+// already read.
+func referenceGuidanceOf(g string) (GuidanceLoad, bool) {
+	rest, ok := strings.CutPrefix(g, referenceHeading)
+	if !ok {
+		return GuidanceLoad{}, false
+	}
+	head, _, _ := strings.Cut(rest, "\n")
+	id, rest, ok := strings.Cut(head, " ")
+	if !ok || id == "" {
+		return GuidanceLoad{}, false
+	}
+	version, refPath, ok := strings.Cut(rest, " ")
+	if !ok || version == "" || refPath == "" || strings.Contains(refPath, " ") {
+		return GuidanceLoad{}, false
+	}
+	return GuidanceLoad{ID: id, Version: version, Path: refPath, Tokens: model.Estimated(model.EstimateTokens(g), model.EstimatorVersion)}, true
+}
+
 // Trajectory is the case's trajectory; a case with no conversation has
 // one with no turns.
 func (s *Session) Trajectory(ctx context.Context) (Trajectory, error) {
@@ -521,7 +557,7 @@ func (s *Session) Trajectory(ctx context.Context) (Trajectory, error) {
 	}
 	c := s.c
 	takes := map[string]bool{}
-	for _, tl := range s.e.companionTools(c) {
+	for _, tl := range s.e.companionTools(ctx, c) {
 		if n := tl.Decl().Name; TakesQuestion(n) {
 			takes[n] = true
 		}
@@ -777,12 +813,15 @@ func (s *Session) consultRows(ctx context.Context, convs []string) (map[string][
 				return nil, err
 			}
 			row := &consultRow{conv: c}
+			asked := map[string]model.ToolCall{}
 			for _, m := range msgs {
 				switch m.Kind {
 				case companion.KindConsult:
 					row.question = m.Text
 				case companion.KindModel:
+					asked = map[string]model.ToolCall{}
 					for _, call := range m.Calls {
+						asked[call.ID] = call
 						row.keys = append(row.keys, callKey(call))
 					}
 					if m.Invocation != "" {
@@ -796,8 +835,11 @@ func (s *Session) consultRows(ctx context.Context, convs []string) (map[string][
 				case companion.KindResults:
 					row.budget = row.budget || m.Text != ""
 					for _, r := range m.Results {
+						if r.Name == readReferenceTool {
+							row.references = append(row.references, referenceRead(asked[r.CallID], r))
+						}
 						if l, ok := loadedGuidance(r); ok {
-							row.guidance.experts = append(row.guidance.experts, l)
+							row.guidance.experts = addGuidance(row.guidance.experts, l)
 						}
 					}
 				}
@@ -1018,7 +1060,7 @@ func (p *trajectoryPass) results(i int, m ConversationMessage) {
 	}
 	for _, r := range m.Results {
 		if l, ok := loadedGuidance(r); ok {
-			p.guidance = append(slices.Clip(p.guidance), l)
+			p.guidance = addGuidance(p.guidance, l)
 		}
 		c := p.asked[r.CallID]
 		if p.askedByEngine {
@@ -1037,6 +1079,8 @@ func (p *trajectoryPass) results(i int, m ConversationMessage) {
 		switch r.Name {
 		case "load_expert":
 			t.Experts = append(t.Experts, ExpertLoad{ID: strParam(c.Args, "id"), Refused: r.IsError})
+		case readReferenceTool:
+			t.References = append(t.References, referenceRead(c, r))
 		case consultTool:
 			t.Consults = append(t.Consults, p.consult(t, c, r.IsError))
 		case evidenceReadTool:
@@ -1071,14 +1115,38 @@ func (p *trajectoryPass) load(l ExpertLoad) {
 	p.turns[p.cur].Experts = append(p.turns[p.cur].Experts, l)
 }
 
-// loadedGuidance is the guidance r, load_expert's result, gave, and false
-// for another result, a refusal or load_expert's word that the expert is
-// loaded already.
+// loadedGuidance is the guidance r, load_expert's or read_reference's result,
+// gave, and false for another result, a refusal or a repeat-read/already-loaded
+// reply.
 func loadedGuidance(r model.ToolResult) (GuidanceLoad, bool) {
-	if r.Name != "load_expert" || r.IsError {
+	if r.IsError {
 		return GuidanceLoad{}, false
 	}
-	return guidanceOf(r.Text)
+	switch r.Name {
+	case "load_expert":
+		return guidanceOf(r.Text)
+	case readReferenceTool:
+		return referenceGuidanceOf(r.Text)
+	}
+	return GuidanceLoad{}, false
+}
+
+func addGuidance(list []GuidanceLoad, l GuidanceLoad) []GuidanceLoad {
+	if slices.ContainsFunc(list, func(x GuidanceLoad) bool {
+		return x.ID == l.ID && x.Version == l.Version && x.Path == l.Path
+	}) {
+		return list
+	}
+	return append(slices.Clip(list), l)
+}
+
+func referenceRead(c model.ToolCall, r model.ToolResult) ReferenceRead {
+	rr := ReferenceRead{Expert: strParam(c.Args, "expert"), Path: strParam(c.Args, "path"), Refused: r.IsError}
+	if !r.IsError {
+		_, ok := referenceGuidanceOf(r.Text)
+		rr.Repeated = !ok
+	}
+	return rr
 }
 
 // consult is consult call c's run: the first consult of the conversation
@@ -1095,7 +1163,7 @@ func (p *trajectoryPass) consult(t *TrajectoryTurn, c model.ToolCall, refused bo
 			continue
 		}
 		row.used = true
-		run.Conversation, run.Calls = row.conv.ID, len(row.keys)
+		run.Conversation, run.Calls, run.References = row.conv.ID, len(row.keys), row.references
 		for _, k := range row.keys {
 			if _, ok := p.seen[k]; ok {
 				run.Repeats++
@@ -1277,6 +1345,11 @@ func totals(turns []TrajectoryTurn, reviews []ReviewRun) TrajectoryTotals {
 				t.ByEngine++
 			}
 		}
+		for _, r := range u.References {
+			if !r.Refused && !r.Repeated {
+				t.References++
+			}
+		}
 		for _, c := range u.Consults {
 			t.Consults++
 			t.ConsultCalls += c.Calls
@@ -1340,10 +1413,16 @@ func RenderTrajectory(t Trajectory) string {
 		for _, x := range u.Experts {
 			fmt.Fprintf(&b, "  expert %s %s\n", text.Safe(x.ID), loadWords(x))
 		}
+		for _, r := range u.References {
+			fmt.Fprintf(&b, "  reference %s %s %s\n", text.Safe(r.Expert), text.Safe(r.Path), readWords(r))
+		}
 		for _, c := range u.Consults {
 			fmt.Fprintf(&b, "  consulted %s: %s\n", text.Safe(c.Expert), consultWords(c))
 			if g := c.Guidance; g != nil && len(g.Experts) > 0 {
 				b.WriteString("    guidance " + guidanceWords(*g) + "\n")
+			}
+			for _, r := range c.References {
+				fmt.Fprintf(&b, "    reference %s %s %s\n", text.Safe(r.Expert), text.Safe(r.Path), readWords(r))
 			}
 		}
 		if n := len(u.ModelCalls); n > 0 {
@@ -1388,6 +1467,9 @@ func RenderTrajectory(t Trajectory) string {
 		b.WriteString("  " + evidenceWords(o.Evidence) + "\n")
 	}
 	fmt.Fprintf(&b, "  %s loaded, %d by the engine; %s, %s, %d repeating the main conversation's\n", text.Plural(o.Loaded, "expert"), o.ByEngine, text.Plural(o.Consults, "consult"), text.Plural(o.ConsultCalls, "call"), o.ConsultRepeats)
+	if o.References > 0 {
+		fmt.Fprintf(&b, "  %s read\n", text.Plural(o.References, "reference"))
+	}
 	fmt.Fprintf(&b, "  %s, input tokens %s; cache read %s, as the records hold them\n", text.Plural(o.ModelCalls, "model call"), sumWords(o.Input), sumWords(o.CacheRead))
 	if len(o.Guidance.Experts) > 0 {
 		b.WriteString("  guidance " + guidanceWords(o.Guidance) + "\n")
@@ -1414,7 +1496,11 @@ func RenderTrajectory(t Trajectory) string {
 func guidanceWords(g GuidanceShare) string {
 	held := make([]string, len(g.Experts))
 	for i, x := range g.Experts {
-		held[i] = fmt.Sprintf("%s %s %d", text.Safe(x.ID), text.Safe(x.Version), x.Tokens.Value)
+		if x.Path != "" {
+			held[i] = fmt.Sprintf("%s %s %s %d", text.Safe(x.ID), text.Safe(x.Version), text.Safe(x.Path), x.Tokens.Value)
+		} else {
+			held[i] = fmt.Sprintf("%s %s %d", text.Safe(x.ID), text.Safe(x.Version), x.Tokens.Value)
+		}
 	}
 	s := fmt.Sprintf("%s: %d tokens; %d sent over %s, ", strings.Join(held, ", "), g.Tokens.Value, g.Sent.Value, text.Plural(g.Calls, "model call"))
 	switch {
@@ -1503,6 +1589,16 @@ func loadWords(x ExpertLoad) string {
 		return "loaded by the engine"
 	}
 	return "loaded"
+}
+
+func readWords(r ReferenceRead) string {
+	switch {
+	case r.Refused:
+		return "refused"
+	case r.Repeated:
+		return "already read"
+	}
+	return "read"
 }
 
 func consultWords(c ConsultRun) string {

@@ -15,6 +15,7 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/lowmagic/compa-engine/internal/schema"
 	"github.com/lowmagic/compa-engine/internal/semver"
@@ -23,8 +24,9 @@ import (
 // EngineAPIVersion is the Expert API version this engine implements. An
 // expert's engineApi range must contain it. Compatible additions before 1.0
 // take a patch version, so existing <0.3.0 ranges still include it: 0.2.1
-// adds a catalog capture's identity tool.
-const EngineAPIVersion = "0.2.1"
+// adds a catalog capture's identity tool; 0.2.2 adds expert reference
+// files read on request.
+const EngineAPIVersion = "0.2.2"
 
 // ReservedTestPrefix begins the IDs of the engine's own tools, offered
 // beside every expert's tests since engine API 0.1.2; no package may define
@@ -68,6 +70,15 @@ type Limits struct {
 
 // DefaultLimits are generous for text packages with small fixtures.
 var DefaultLimits = Limits{MaxFiles: 2000, MaxFileBytes: 4 << 20, MaxTotalBytes: 32 << 20, MaxDepth: 16}
+
+const (
+	// ReferenceWarnBytes is the soft bound past which Loader.Load warns
+	// on a declared reference file (compa expert check).
+	ReferenceWarnBytes = 32 << 10
+	// ReferenceMaxBytes is the hard bound past which read_reference
+	// refuses a reference file.
+	ReferenceMaxBytes = 64 << 10
+)
 
 // Package is a loaded and validated expert or tool catalog. A catalog has
 // no analyst text or references.
@@ -194,12 +205,24 @@ func (l Loader) Load(dir string) (*Package, error) {
 		pkg.Analyst = st.read(pkg.Manifest.Spec.Analyst)
 	}
 	for _, ref := range pkg.Manifest.Spec.References {
-		pkg.References[ref] = st.read(ref)
+		before := len(st.problems)
+		data := st.read(ref.Path)
+		if len(st.problems) == before {
+			switch {
+			case !utf8.ValidString(data):
+				st.addf("spec.references: %q is not valid UTF-8 text", ref.Path)
+			case strings.TrimSpace(data) == "":
+				st.addf("spec.references: %q is empty", ref.Path)
+			}
+		}
+		pkg.References[ref.Path] = data
 	}
 	if len(st.problems) > 0 {
 		return fail()
 	}
 	pkg.Warnings = append(pkg.Warnings, unexplainedTools(pkg)...)
+	pkg.Warnings = append(pkg.Warnings, unexplainedReferences(pkg)...)
+	pkg.Warnings = append(pkg.Warnings, referenceWarnings(pkg)...)
 	return pkg, nil
 }
 
@@ -231,7 +254,10 @@ func (st *loadState) decodeManifest(file string, m *Manifest) (any, bool) {
 	return st.validate(file, ids[0], doc, m)
 }
 
-var idToken = regexp.MustCompile(`[A-Za-z0-9_-]+(\.[A-Za-z0-9_-]+)*`)
+var (
+	idToken   = regexp.MustCompile(`[A-Za-z0-9_-]+(\.[A-Za-z0-9_-]+)*`)
+	pathToken = regexp.MustCompile(`[A-Za-z0-9_./-]+`)
+)
 
 // unexplainedTools warns about each catalog tool the expert lists that its
 // analyst text never names by full ID: the analyst text is where a tool's
@@ -252,6 +278,44 @@ func unexplainedTools(pkg *Package) []string {
 			if !named[id] {
 				warnings = append(warnings, fmt.Sprintf("%s: does not mention %s, which spec.catalogs lists; explain what its output means for this expert, naming it by that ID", pkg.Manifest.Spec.Analyst, id))
 			}
+		}
+	}
+	return warnings
+}
+
+// unexplainedReferences warns about each declared reference whose path
+// analyst text never names: the analyst text says when a reference is
+// worth reading. Paths are matched as whole path tokens (with trailing
+// sentence periods trimmed), so foo/refs/a.md or refs/a.md.old do not
+// satisfy refs/a.md.
+func unexplainedReferences(pkg *Package) []string {
+	if len(pkg.Manifest.Spec.References) == 0 {
+		return nil
+	}
+	named := map[string]bool{}
+	for _, tok := range pathToken.FindAllString(pkg.Analyst, -1) {
+		named[strings.TrimRight(tok, ".")] = true
+	}
+	var warnings []string
+	for _, ref := range pkg.Manifest.Spec.References {
+		if !named[ref.Path] {
+			warnings = append(warnings, fmt.Sprintf("%s: does not mention %s, which spec.references lists; say when to read it, naming it by that path", pkg.Manifest.Spec.Analyst, ref.Path))
+		}
+	}
+	return warnings
+}
+
+// referenceWarnings warns about declared reference files past the soft
+// or hard size bounds.
+func referenceWarnings(pkg *Package) []string {
+	var warnings []string
+	for _, ref := range pkg.Manifest.Spec.References {
+		n := len(pkg.References[ref.Path])
+		switch {
+		case n > ReferenceMaxBytes:
+			warnings = append(warnings, fmt.Sprintf("%s: %d bytes exceeds the %d-byte reference limit; read_reference will refuse it", ref.Path, n, ReferenceMaxBytes))
+		case n > ReferenceWarnBytes:
+			warnings = append(warnings, fmt.Sprintf("%s: %d bytes exceeds the %d-byte soft reference bound; consider splitting it", ref.Path, n, ReferenceWarnBytes))
 		}
 	}
 	return warnings
@@ -422,8 +486,25 @@ func (st *loadState) checkManifest(pkg *Package, file string, doc any) {
 		st.requireFile("spec.analyst", spec.Analyst)
 	}
 	st.checkCatalogRefs(file, spec)
-	for _, ref := range spec.References {
-		st.requireFile("spec.references", ref)
+	seenRefs := map[string]int{}
+	for i, ref := range spec.References {
+		where := fmt.Sprintf("spec.references[%d].path", i)
+		if j, dup := seenRefs[ref.Path]; dup {
+			st.addf("%s: %s: reference %q is already listed at spec.references[%d]", file, where, ref.Path, j)
+			continue
+		}
+		seenRefs[ref.Path] = i
+		switch ref.Path {
+		case spec.Analyst:
+			if spec.Analyst != "" {
+				st.addf("%s: %s: %q is spec.analyst, not a reference file", file, where, ref.Path)
+				continue
+			}
+		case ManifestFile, CatalogFile, TestsFileName:
+			st.addf("%s: %s: %q is a package definition file, not a reference file", file, where, ref.Path)
+			continue
+		}
+		st.requireFile(where, ref.Path)
 	}
 	for _, s := range spec.Routing.Signals {
 		if s.Matches != "" {

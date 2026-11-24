@@ -546,6 +546,8 @@ func runningLabel(r toolRun) string {
 	switch r.name {
 	case "load_expert":
 		return "loading " + argString(r.args, "id")
+	case "read_reference":
+		return "reading " + argString(r.args, "expert") + " " + argString(r.args, "path")
 	case "consult":
 		return "consulting " + argString(r.args, "expert")
 	}
@@ -725,6 +727,8 @@ func toolOutcome(r toolRun) string {
 		return s + " ✗ " + text.Ellipsis(firstLine(r.result), 60)
 	case r.name == "load_expert":
 		s = "loaded " + argString(r.args, "id")
+	case r.name == "read_reference":
+		s = "read " + argString(r.args, "expert") + " " + argString(r.args, "path")
 	case r.name == "consult":
 		s = "consulted " + argString(r.args, "expert")
 	}
@@ -740,6 +744,8 @@ func toolLabel(name string, args map[string]any) string {
 	switch name {
 	case "run_tool", "describe_tool", "load_expert":
 		return name + " " + argString(args, "id")
+	case "read_reference":
+		return name + " " + argString(args, "expert") + " " + argString(args, "path")
 	case "consult":
 		return name + " " + argString(args, "expert")
 	case "command":
