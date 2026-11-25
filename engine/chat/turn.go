@@ -685,134 +685,406 @@ func (m *model) debugAnswers(batch []toolRun) {
 }
 
 // toolRows are the compact rows naming the tool calls of a batch, what each
-// stored and each refusal or failure, each followed by its own question:
-// one row, the calls apart by callSep, where it fits the terminal's
-// width; otherwise a row for each call, the first under the batch's mark,
-// each cut to the width, so every call keeps its question beside it.
+// stored and each refusal or failure, each followed by its own question and
+// any trailing path tail: one row, the calls apart by callSep, where the
+// batch fits the terminal's width; otherwise each call starts on its own
+// row (the first under the batch's mark) and wraps onto indented
+// continuation lines at width. Calls with paths prioritize:
+//  1. the leading NNNN artifact ID,
+//  2. the question,
+//  3. the end of the file path.
 func toolRows(batch []toolRun, width int) []string {
-	plain := make([]string, len(batch))
-	styled := make([]string, len(batch))
+	parts := make([]toolParts, len(batch))
 	for i, r := range batch {
-		out := text.Safe(firstLine(toolOutcome(r)))
-		q := engine.QuestionOf(r.name, r.args)
-		plain[i] = out
-		if q != "" {
-			plain[i] += " · " + text.Safe(q)
+		parts[i] = splitToolParts(r)
+	}
+	if width <= 0 || len(batch) > 1 {
+		plain := make([]string, len(batch))
+		styled := make([]string, len(batch))
+		for i, r := range batch {
+			plain[i], styled[i] = renderSingleLineTool(r, parts[i])
 		}
-		styled[i] = styleToolCall(r, out, q)
+		if s := toolMark + strings.Join(plain, callSep); width <= 0 || ansi.StringWidth(s) <= width {
+			return []string{faintW.Render(toolMark) + strings.Join(styled, faintW.Render(callSep))}
+		}
 	}
-	if s := toolMark + strings.Join(plain, callSep); width <= 0 || ansi.StringWidth(s) <= width {
-		return []string{faintW.Render(toolMark) + strings.Join(styled, faintW.Render(callSep))}
-	}
-	rows := make([]string, len(styled))
-	for i, c := range styled {
+	leadW := ansi.StringWidth(toolMark)
+	blankLead := strings.Repeat(" ", leadW)
+	var rows []string
+	for i, r := range batch {
 		lead := faintW.Render(toolMark)
 		if i > 0 {
-			lead = strings.Repeat(" ", ansi.StringWidth(toolMark))
+			lead = blankLead
 		}
-		rows[i] = ansi.Truncate(lead+c, width, "…")
+		rows = append(rows, wrapToolRow(lead, leadW, r, parts[i], width)...)
 	}
 	return rows
 }
 
-// styleToolCall tints the tool action in blue (red on error) and keeps
-// outcomes, evidence names and questions faint so tool lines stay scannable
-// without competing with answers.
-func styleToolCall(r toolRun, out, question string) string {
-	var b strings.Builder
-	switch {
-	case r.isError:
-		if head, tail, ok := strings.Cut(out, " ✗ "); ok {
-			b.WriteString(toolW.Render(head))
-			b.WriteString(errorW.Render(" ✗ " + tail))
-		} else {
-			b.WriteString(errorW.Render(out))
-		}
-	case !r.done:
-		if head, tail, ok := strings.Cut(out, " (cancelled)"); ok {
-			b.WriteString(toolW.Render(head))
-			b.WriteString(warnW.Render(" (cancelled)" + tail))
-		} else {
-			b.WriteString(faintW.Render(out))
-		}
-	default:
-		if head, tail, ok := strings.Cut(out, " → "); ok {
-			b.WriteString(toolW.Render(head))
-			b.WriteString(faintW.Render(" → " + tail))
-		} else {
-			b.WriteString(toolW.Render(out))
-		}
-	}
-	if question != "" {
-		b.WriteString(faintW.Render(" · " + text.Safe(question)))
-	}
-	return b.String()
-}
-
-// toolMark leads a batch's tool row, and callSep parts its calls on one.
+// toolMark leads a batch's tool row, callSep parts calls on one line,
+// toolCont indents wrapped continuation lines beneath a call, and
+// maxPathTail caps trailing path display so wrapper directory names do not
+// crowd the row.
 const (
-	toolMark = "▸ "
-	callSep  = " │ "
+	toolMark    = "▸ "
+	callSep     = " │ "
+	toolCont    = "    "
+	maxPathTail = 40
 )
 
-// toolOutcome says what one tool call did.
-func toolOutcome(r toolRun) string {
-	s := toolLabel(r.name, r.args)
-	switch {
-	case !r.done:
-		return s + " (cancelled)"
-	case r.isError:
-		return s + " ✗ " + text.Ellipsis(firstLine(r.result), 60)
-	case r.name == "load_expert":
-		s = "loaded " + argString(r.args, "id")
-	case r.name == "read_reference":
-		s = "read " + argString(r.args, "expert") + " " + argString(r.args, "path")
-	case r.name == "consult":
-		s = "consulted " + argString(r.args, "expert")
-	}
-	if len(r.evidence) > 0 {
-		s += " → " + strings.Join(r.evidence, ", ")
-	}
-	return s
+// toolParts splits a tool call's display into its action head (blue),
+// outcome (evidence / error / cancelled), question (priority 2) and
+// trailing path tail (priority 3).
+type toolParts struct {
+	head       string
+	outcome    string
+	question   string
+	tail       string
+	tailElided bool
+	inlinePath string
+	toolName   string
 }
 
-// toolLabel is a tool call by its name and the parameter that says most
-// about it.
-func toolLabel(name string, args map[string]any) string {
-	switch name {
+func splitToolParts(r toolRun) toolParts {
+	p := toolParts{
+		question: text.Safe(engine.QuestionOf(r.name, r.args)),
+		toolName: r.name,
+	}
+	switch {
+	case !r.done:
+		p.outcome = " (cancelled)"
+	case r.isError:
+		p.outcome = " ✗ " + text.Safe(text.Ellipsis(firstLine(r.result), 60))
+	case len(r.evidence) > 0:
+		p.outcome = " → " + text.Safe(strings.Join(r.evidence, ", "))
+	}
+	if r.done && !r.isError {
+		switch r.name {
+		case "load_expert":
+			p.head = text.Safe(firstLine("loaded " + argString(r.args, "id")))
+			return p
+		case "read_reference":
+			p.head = text.Safe(firstLine("read " + argString(r.args, "expert") + " " + argString(r.args, "path")))
+			return p
+		case "consult":
+			p.head = text.Safe(firstLine("consulted " + argString(r.args, "expert")))
+			return p
+		}
+	}
+	switch r.name {
 	case "run_tool", "describe_tool", "load_expert":
-		return name + " " + argString(args, "id")
+		p.head = text.Safe(firstLine(r.name + " " + argString(r.args, "id")))
+		return p
 	case "read_reference":
-		return name + " " + argString(args, "expert") + " " + argString(args, "path")
+		p.head = text.Safe(firstLine(r.name + " " + argString(r.args, "expert") + " " + argString(r.args, "path")))
+		return p
 	case "consult":
-		return name + " " + argString(args, "expert")
+		p.head = text.Safe(firstLine(r.name + " " + argString(r.args, "expert")))
+		return p
 	case "command":
-		if argv, ok := args["argv"].([]any); ok {
+		if argv, ok := r.args["argv"].([]any); ok {
 			words := make([]string, 0, len(argv))
 			for _, w := range argv {
 				words = append(words, fmt.Sprint(w))
 			}
-			return name + " " + strings.Join(words, " ")
+			p.head = text.Safe(firstLine(r.name + " " + strings.Join(words, " ")))
+			return p
 		}
 	}
 	for _, k := range []string{"pattern", "filter", "query"} {
-		if v := argString(args, k); v != "" {
-			return name + " " + strconv.Quote(v)
+		if v := argString(r.args, k); v != "" {
+			if raw := text.Safe(firstLine(argString(r.args, "path"))); raw != "" {
+				if id, rest, elided := splitArtifactPath(raw); id != "" {
+					p.head = text.Safe(firstLine(r.name + " " + id + " " + strconv.Quote(v)))
+					p.tail, p.tailElided = rest, elided
+					return p
+				}
+			}
+			p.head = text.Safe(firstLine(r.name + " " + strconv.Quote(v)))
+			return p
 		}
 	}
-	for _, k := range []string{"path", "id", "a"} {
-		if v := argString(args, k); v != "" {
-			return name + " " + v
+	if raw := text.Safe(firstLine(argString(r.args, "path"))); raw != "" {
+		if id, rest, elided := splitArtifactPath(raw); id != "" {
+			p.head = text.Safe(firstLine(r.name + " " + id))
+			p.tail, p.tailElided = rest, elided
+			return p
+		}
+		p.head = text.Safe(firstLine(r.name + " " + raw))
+		p.inlinePath = raw
+		return p
+	}
+	for _, k := range []string{"id", "a"} {
+		if v := argString(r.args, k); v != "" {
+			p.head = text.Safe(firstLine(r.name + " " + v))
+			return p
 		}
 	}
-	if ids, ok := args["ids"].([]any); ok {
+	if ids, ok := r.args["ids"].([]any); ok {
 		words := make([]string, 0, len(ids))
 		for _, w := range ids {
 			words = append(words, fmt.Sprint(w))
 		}
-		return name + " " + strings.Join(words, ", ")
+		p.head = text.Safe(firstLine(r.name + " " + strings.Join(words, ", ")))
+		return p
 	}
-	return name
+	p.head = text.Safe(firstLine(r.name))
+	return p
+}
+
+// styleToolHead tints the tool action in blue (red on error with no suffix,
+// faint when cancelled with no suffix).
+func styleToolHead(r toolRun, head, outcome string) string {
+	switch {
+	case r.isError && outcome == "":
+		return errorW.Render(head)
+	case !r.done && outcome == "":
+		return faintW.Render(head)
+	default:
+		return toolW.Render(head)
+	}
+}
+
+// styleToolOutcome tints error outcomes red, cancellations yellow, and
+// evidence names faint.
+func styleToolOutcome(r toolRun, outcome string) string {
+	if outcome == "" {
+		return ""
+	}
+	switch {
+	case r.isError:
+		return errorW.Render(outcome)
+	case !r.done:
+		return warnW.Render(outcome)
+	default:
+		return faintW.Render(outcome)
+	}
+}
+
+func renderSingleLineTool(r toolRun, p toolParts) (plain, styled string) {
+	head := p.head
+	tail, tailElided := p.tail, p.tailElided
+	if p.inlinePath != "" && ansi.StringWidth(p.inlinePath) > maxPathTail {
+		if p.question != "" {
+			head = p.toolName
+			tail, tailElided = p.inlinePath, false
+		} else if short := shortenPathTail(p.inlinePath, maxPathTail, false); short != "" {
+			head = p.toolName + " " + short
+		}
+	}
+	shownTail := shortenPathTail(tail, maxPathTail, tailElided)
+	var pb, sb strings.Builder
+	pb.WriteString(head)
+	pb.WriteString(p.outcome)
+	sb.WriteString(styleToolHead(r, head, p.outcome))
+	sb.WriteString(styleToolOutcome(r, p.outcome))
+	if p.question != "" {
+		pb.WriteString(" · ")
+		pb.WriteString(p.question)
+		sb.WriteString(faintW.Render(" · " + p.question))
+	}
+	if shownTail != "" {
+		pb.WriteString(" · ")
+		pb.WriteString(shownTail)
+		sb.WriteString(faintW.Render(" · " + shownTail))
+	}
+	return pb.String(), sb.String()
+}
+
+// wrapToolRow formats one tool call to fit within width, wrapping the
+// question and trailing path tail onto indented continuation lines instead
+// of clipping them.
+func wrapToolRow(lead string, leadW int, r toolRun, p toolParts, width int) []string {
+	if width <= 0 {
+		_, styled := renderSingleLineTool(r, p)
+		return []string{lead + styled}
+	}
+	contW := len(toolCont)
+	contAvail := max(width-contW, 1)
+	tailBudget := min(maxPathTail, max(contAvail, 8))
+
+	head := p.head
+	tail, tailElided := p.tail, p.tailElided
+	if p.inlinePath != "" {
+		full := leadW + ansi.StringWidth(head) + ansi.StringWidth(p.outcome)
+		if p.question != "" {
+			full += 3 + ansi.StringWidth(p.question)
+		}
+		if full > width || ansi.StringWidth(p.inlinePath) > maxPathTail {
+			if p.question != "" {
+				head = p.toolName
+				tail, tailElided = p.inlinePath, false
+			} else {
+				avail := width - leadW - ansi.StringWidth(p.toolName) - 1 - ansi.StringWidth(p.outcome)
+				if short := shortenPathTail(p.inlinePath, min(max(avail, 8), tailBudget), false); short != "" {
+					head = p.toolName + " " + short
+				}
+			}
+		}
+	}
+	shownTail := shortenPathTail(tail, tailBudget, tailElided)
+
+	curStyled := lead + styleToolHead(r, head, p.outcome) + styleToolOutcome(r, p.outcome)
+	curW := leadW + ansi.StringWidth(head) + ansi.StringWidth(p.outcome)
+	if curW > width {
+		curStyled = ansi.Truncate(curStyled, width, "…")
+		curW = width
+	}
+	var rows []string
+	if p.question != "" {
+		first := true
+		for _, w := range strings.Fields(p.question) {
+			ww := ansi.StringWidth(w)
+			if first {
+				if curW+3+ww <= width {
+					curStyled += faintW.Render(" · " + w)
+					curW += 3 + ww
+				} else {
+					rows = append(rows, curStyled)
+					if ww > contAvail {
+						w = ansi.Truncate(w, contAvail, "…")
+						ww = ansi.StringWidth(w)
+					}
+					curStyled = toolCont + faintW.Render(w)
+					curW = contW + ww
+				}
+				first = false
+				continue
+			}
+			if curW+1+ww <= width {
+				curStyled += faintW.Render(" " + w)
+				curW += 1 + ww
+				continue
+			}
+			rows = append(rows, curStyled)
+			if ww > contAvail {
+				w = ansi.Truncate(w, contAvail, "…")
+				ww = ansi.StringWidth(w)
+			}
+			curStyled = toolCont + faintW.Render(w)
+			curW = contW + ww
+		}
+	}
+	if shownTail != "" {
+		tw := ansi.StringWidth(shownTail)
+		if curW+3+tw <= width {
+			curStyled += faintW.Render(" · " + shownTail)
+		} else {
+			rows = append(rows, curStyled)
+			if tw > contAvail {
+				shownTail = shortenPathTail(tail, contAvail, tailElided)
+				if ansi.StringWidth(shownTail) > contAvail {
+					shownTail = ansi.Truncate(shownTail, contAvail, "…")
+				}
+			}
+			curStyled = toolCont + faintW.Render(shownTail)
+		}
+	}
+	rows = append(rows, curStyled)
+	return rows
+}
+
+// splitArtifactPath splits a leading 4-digit attachment prefix (such as
+// "0020-archive.tar.gz/sub/file") into its ID ("0020"), the remaining path
+// ("sub/file", or "archive.tar.gz" when p has no slash), and whether a
+// directory segment was elided before the remainder. ISO dates like
+// "2026-11-25" are not treated as attachment prefixes.
+func splitArtifactPath(p string) (id, rest string, elided bool) {
+	clean := strings.TrimRight(strings.TrimPrefix(p, "./"), "/")
+	first, after, hasSlash := strings.Cut(clean, "/")
+	if !isArtifactPrefix(first) {
+		return "", p, false
+	}
+	id = first[:4]
+	if hasSlash {
+		return id, strings.TrimLeft(after, "/"), true
+	}
+	return id, first[5:], false
+}
+
+func isArtifactPrefix(seg string) bool {
+	if len(seg) < 6 || seg[4] != '-' || !isDigits(seg[:4]) {
+		return false
+	}
+	if len(seg) >= 10 && seg[7] == '-' && isDigits(seg[5:7]) && isDigits(seg[8:10]) {
+		return false
+	}
+	return true
+}
+
+func isDigits(s string) bool {
+	if s == "" {
+		return false
+	}
+	for i := range len(s) {
+		if s[i] < '0' || s[i] > '9' {
+			return false
+		}
+	}
+	return true
+}
+
+// shortenPathTail keeps the end of p within budget display columns,
+// preferring whole trailing path segments prefixed with "…/" and falling
+// back to the trailing characters of the final component prefixed with "…".
+func shortenPathTail(p string, budget int, elided bool) string {
+	if p == "" || budget <= 0 {
+		return ""
+	}
+	if !elided && ansi.StringWidth(p) <= budget {
+		return p
+	}
+	if elided && ansi.StringWidth("…/"+p) <= budget {
+		return "…/" + p
+	}
+	if strings.Contains(p, "/") {
+		segs := strings.Split(p, "/")
+		cur := ""
+		for i := len(segs) - 1; i >= 0; i-- {
+			if segs[i] == "" {
+				continue
+			}
+			cand := segs[i]
+			if cur != "" {
+				cand += "/" + cur
+			}
+			if ansi.StringWidth("…/"+cand) > budget {
+				break
+			}
+			cur = cand
+		}
+		if cur != "" {
+			return "…/" + cur
+		}
+		p = segs[len(segs)-1]
+	}
+	if budget < 2 {
+		return ""
+	}
+	return "…" + tailRunes(p, budget-1)
+}
+
+func tailRunes(s string, maxWidth int) string {
+	if maxWidth <= 0 {
+		return ""
+	}
+	rs := []rune(s)
+	w, i := 0, len(rs)
+	for i > 0 {
+		rw := ansi.StringWidth(string(rs[i-1]))
+		if w+rw > maxWidth {
+			break
+		}
+		w += rw
+		i--
+	}
+	return string(rs[i:])
+}
+
+// toolOutcome says what one tool call did.
+func toolOutcome(r toolRun) string {
+	p := splitToolParts(r)
+	return p.head + p.outcome
 }
 
 func argString(args map[string]any, k string) string {

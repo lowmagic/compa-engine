@@ -16,10 +16,10 @@ import (
 
 // TestToolLineShowsTheQuestion: the tool line gives each call's question
 // after what the call did, the calls in the order they were made; a batch
-// too wide for the terminal gets a row for each call, each cut to the
-// width, live and reopened alike; under /debug each call's question
-// follows the line whole, and a call that asked none says so. Synthetic
-// (question.json).
+// too wide for the terminal gets a row for each call, wrapping long
+// questions onto indented continuation lines within the width, live and
+// reopened alike; under /debug each call's question follows the line
+// whole, and a call that asked none says so. Synthetic (question.json).
 func TestToolLineShowsTheQuestion(t *testing.T) {
 	const long = "Does the OVN controller on worker-1 fail to get its chassis before the DNS timeouts began, and does it say which chassis it was looking for each time it retried?"
 	s := session(t, "question.json")
@@ -32,14 +32,16 @@ func TestToolLineShowsTheQuestion(t *testing.T) {
 	mark := len(h.printed)
 	h.say("what failed?")
 	out := h.since(mark)
-	// The grep's question is cut, and the find, made after it, has its
-	// own row beneath.
+	// The grep's long question wraps onto indented continuation lines within
+	// 100 columns, and the find, made after it, has its own row beneath.
 	batch := []*regexp.Regexp{
-		regexp.MustCompile(`^▸ grep "failed to get chassis" → e\d+ · Does the OVN controller on worker-1 f.*…$`),
+		regexp.MustCompile(`^▸ grep "failed to get chassis" → e\d+ · Does the OVN controller on worker-1 fail to get its chassis$`),
+		regexp.MustCompile(`^    before the DNS timeouts began, and does it say which chassis it was looking for each time it$`),
+		regexp.MustCompile(`^    retried\?$`),
 		regexp.MustCompile(`^  find namespaces → e\d+$`),
 	}
 	if rows := batchRows(out); len(rows) != 1 || !matchRows(rows[0], batch, 100) {
-		t.Fatalf("the turn's tool rows: %q, want the grep and its question cut to the width, then the find\n%s", rows, out)
+		t.Fatalf("the turn's tool rows: %q, want the grep with its question wrapped within 100 columns, then the find\n%s", rows, out)
 	}
 	for _, want := range []string{"question · grep: " + long, "question · find: none"} {
 		if !strings.Contains(flat(out), want) {
@@ -131,14 +133,126 @@ func TestBatchedToolLineGivesEachCallItsQuestion(t *testing.T) {
 	}
 	rows := batchRows(h.since(mark))
 	want := [][]*regexp.Regexp{{
-		regexp.MustCompile(`^▸ grep "sync" → e5 · Did the OVN controller fail to sync worker-1 .*…$`),
+		regexp.MustCompile(`^▸ grep "sync" → e5 · Did the OVN controller fail to sync worker-1 before the DNS timeouts began, and which chassis did$`),
+		regexp.MustCompile(`^    it want each time\?$`),
 		regexp.MustCompile(`^  read pods\.yaml → e6 · Which node ran ovnkube-node-x7k2p when it restarted\?$`),
 		regexp.MustCompile(`^  find namespaces → e7 · Is worker-1's journal captured\?$`),
 	}, {
 		regexp.MustCompile(`^▸ find a → e8 · Is a there\? │ find b → e9 · Is b there\?$`),
 	}}
 	if len(rows) != len(want) || !matchRows(rows[0], want[0], 120) || !matchRows(rows[1], want[1], 120) {
-		t.Fatalf("the batches' tool rows: %q, want each call in the order made with its own question, cut to 120 columns", rows)
+		t.Fatalf("the batches' tool rows: %q, want each call in the order made with its own question wrapped within 120 columns", rows)
+	}
+}
+
+// TestToolPathPriority: calls with paths prioritize the leading NNNN
+// attachment ID, then the question, then the end of the file path, wrapping
+// cleanly within the terminal width instead of truncating the question or
+// evidence name behind long archive directories.
+func TestToolPathPriority(t *testing.T) {
+	strip := func(rows []string) []string {
+		out := make([]string, len(rows))
+		for i, r := range rows {
+			out[i] = ansi.Strip(r)
+		}
+		return out
+	}
+
+	// Archive-prefixed paths compress to NNNN first, question second, end of path third.
+	batch := []toolRun{
+		{
+			name:     "find",
+			args:     map[string]any{"path": "0010-inspect.local.5855027426577652645.tar.gz/inspect.local.5855027426577652645/namespaces", "question": "What namespaces are in the capture?"},
+			done:     true,
+			evidence: []string{"e10"},
+		},
+		{
+			name:     "read",
+			args:     map[string]any{"path": "0020-bundle.local.7652150651890380979-node01.tar.gz/bundle.local.7652150651890380979-node01/namespaces/app/pods/worker-0/logs/current.log", "question": "Why did worker-0 restart?"},
+			done:     true,
+			evidence: []string{"e11"},
+		},
+		{
+			name:     "grep",
+			args:     map[string]any{"path": "0020-bundle.local.7652150651890380979-node01.tar.gz/bundle.local.7652150651890380979-node01/namespaces/app/pods/worker-0/logs/current.log", "pattern": "OOMKilled", "question": "Was worker-0 OOMKilled?"},
+			done:     true,
+			evidence: []string{"e12"},
+		},
+		{
+			name:     "read",
+			args:     map[string]any{"path": "0030-summary.log", "question": "What does the summary report?"},
+			done:     true,
+			evidence: []string{"e13"},
+		},
+	}
+	got := strip(toolRows(batch, 100))
+	want := []string{
+		"▸ find 0010 → e10 · What namespaces are in the capture? · …/namespaces",
+		"  read 0020 → e11 · Why did worker-0 restart? · …/app/pods/worker-0/logs/current.log",
+		`  grep 0020 "OOMKilled" → e12 · Was worker-0 OOMKilled? · …/app/pods/worker-0/logs/current.log`,
+		"  read 0030 → e13 · What does the summary report? · summary.log",
+	}
+	if !slices.Equal(got, want) {
+		t.Fatalf("prefixed tool rows:\ngot:  %q\nwant: %q", got, want)
+	}
+	for _, r := range got {
+		if w := ansi.StringWidth(r); w > 100 {
+			t.Errorf("row %d columns wide (>100): %q", w, r)
+		}
+	}
+
+	// Long question + path wraps cleanly with indented continuation lines, never losing the path tail.
+	wrapped := strip(toolRows([]toolRun{{
+		name:     "read",
+		args:     map[string]any{"path": "0020-bundle.local.7652150651890380979-node01.tar.gz/bundle.local.7652150651890380979-node01/namespaces/app/pods/worker-0/logs/current.log", "question": "Does worker-0 log an out-of-memory or timeout error right before its container restarted?"},
+		done:     true,
+		evidence: []string{"e14"},
+	}}, 80))
+	wantWrapped := []string{
+		"▸ read 0020 → e14 · Does worker-0 log an out-of-memory or timeout error right",
+		"    before its container restarted? · …/app/pods/worker-0/logs/current.log",
+	}
+	if !slices.Equal(wrapped, wantWrapped) {
+		t.Errorf("wrapped tool rows:\ngot:  %q\nwant: %q", wrapped, wantWrapped)
+	}
+
+	// Long unprefixed path moves its tail after the question when it exceeds the line or cap.
+	unprefixed := strip(toolRows([]toolRun{{
+		name:     "read",
+		args:     map[string]any{"path": "cluster-scoped-resources/core/nodes/worker-1.example.com.yaml", "question": "Is worker-1 Ready?"},
+		done:     true,
+		evidence: []string{"e15"},
+	}}, 80))
+	wantUnprefixed := []string{
+		"▸ read → e15 · Is worker-1 Ready? · …/core/nodes/worker-1.example.com.yaml",
+	}
+	if !slices.Equal(unprefixed, wantUnprefixed) {
+		t.Errorf("unprefixed long path:\ngot:  %q\nwant: %q", unprefixed, wantUnprefixed)
+	}
+
+	// An ISO date directory is not treated as a 4-digit attachment ID.
+	if id, rest, elided := splitArtifactPath("2026-11-25/logs/app.log"); id != "" || rest != "2026-11-25/logs/app.log" || elided {
+		t.Errorf("ISO date misclassified as attachment prefix: id=%q rest=%q elided=%v", id, rest, elided)
+	}
+
+	// Narrow width keeps every row within bounds, including single-segment long archive names and errors.
+	narrow := strip(toolRows([]toolRun{{
+		name:    "find",
+		args:    map[string]any{"path": "0020-bundle.local.7652150651890380979-node01.tar.gz", "question": "What files are inside?"},
+		done:    true,
+		isError: true,
+		result:  "not found",
+	}}, 44))
+	for _, r := range narrow {
+		if w := ansi.StringWidth(r); w > 44 {
+			t.Errorf("narrow row %d wide (>44): %q", w, r)
+		}
+	}
+	joined := flat(strings.Join(narrow, "\n"))
+	for _, wantSub := range []string{"▸ find 0020 ✗ not found", "What files are inside?", "node01.tar.gz"} {
+		if !strings.Contains(joined, wantSub) {
+			t.Errorf("narrow output lacks %q:\n%s", wantSub, joined)
+		}
 	}
 }
 

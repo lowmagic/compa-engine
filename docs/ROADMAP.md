@@ -421,3 +421,18 @@ Done when: `make check` passes; `cli_test.TestOpenAcquiresTheCaseOnce`, `TestCas
 `TestSharedCaseFolderAllowsConcurrentHomeStores`, `TestHomeStoreMovesIntoTheCaseFolder` and
 `TestHomeStoreBesideAFolderStoreIsKept` verify the home default, concurrent shared-folder opens, and opt-in
 case-folder storage.
+
+## 27. Tool call rows prioritize attachment ID, question and path end
+
+Status: done
+
+Tool call rows in the chat now format calls with paths in priority order — leading `NNNN` attachment ID first, then
+the outcome and question, then the trailing end of the file path (shortened from the left to whole trailing segments
+within a bounded cap) — and wrap long questions or trailing paths onto indented continuation lines within the terminal
+width instead of truncating them behind long nested archive prefixes.
+
+Delivers: User interface.
+
+Done when: `make check` passes; `chat.TestToolPathPriority`, `TestToolLineShowsTheQuestion` and
+`TestBatchedToolLineGivesEachCallItsQuestion` verify `NNNN` prefix extraction, question-before-path ordering, trailing
+path shortening, ISO-date exclusion, and wrapped rows within terminal width.

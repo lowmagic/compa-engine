@@ -207,8 +207,10 @@ omitted when none does (`engine.TestReadReferenceAbsentWhenNoneInstalled`,
   restating the action, is reported, never corrected (`engine.TestToolsDeclareTheQuestion`,
   `TestQuestionTakenOutBeforeTheCallRuns`). The chat's tool line gives a batch's calls in the order the model made
   them, though they run together, each with its own question after what it did: on one line where the batch fits the
-  terminal's width, otherwise on a row for each call, cut to the width; live and reopened; `/debug` gives each whole
-  (`chat.TestToolLineShowsTheQuestion`, `TestBatchedToolLineGivesEachCallItsQuestion`).
+  terminal's width, otherwise each call on its own row wrapping onto indented continuation lines within the width
+  (calls with paths showing the leading `NNNN` attachment ID first, then the question, then the end of the path); live
+  and reopened; `/debug` gives each whole
+  (`chat.TestToolLineShowsTheQuestion`, `TestBatchedToolLineGivesEachCallItsQuestion`, `TestToolPathPriority`).
 - **The answers.** Any call, one taking no question included, may give `answers`: a list of an item and, in one line,
   what it settled about the question it was fetched for, a search that found nothing with how far it read. They are
   taken out of the arguments as the question is and kept in the stored call. An answer is the model's reading, never
@@ -941,8 +943,9 @@ checks.
   it as written, a call without one run (`engine.TestToolsDeclareTheQuestion`, `TestQuestionTakenOutBeforeTheCallRuns`);
   the trajectory reports each, the calls with none, repeated, vague or restating the action, and compares calls by
   what ran (`engine.TestTrajectoryQuestions`, `TestRestatesAction`); the chat's tool line gives each call's own, in the
-  order made, a row for each call where the batch is wider than the terminal, each cut to the width, live and
-  reopened, and `/debug` whole (`chat.TestToolLineShowsTheQuestion`, `TestBatchedToolLineGivesEachCallItsQuestion`).
+  order made, each call on its own row where the batch is wider than the terminal, wrapping within the width and
+  prioritizing attachment ID, question and trailing path, live and reopened, and `/debug` whole
+  (`chat.TestToolLineShowsTheQuestion`, `TestBatchedToolLineGivesEachCallItsQuestion`, `TestToolPathPriority`).
 - **[C3]** Reference files listed on expert load are read on request with `read_reference` from the conversation's pinned
   snapshot without storing evidence or disclosure, answer repeat reads cleanly across turns or within the same batch,
   refuse unloaded experts, undeclared or escaping paths, and files past 64 KiB, stay isolated per consult, omit
