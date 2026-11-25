@@ -1,0 +1,4 @@
+# want: /storage/location
+apiVersion: compa.lowmag.cc/config/v1alpha1
+kind: Config
+storage: {location: shared}

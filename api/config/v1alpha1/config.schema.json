@@ -63,7 +63,8 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "homeRetentionDays": {"type": "integer", "minimum": 1, "description": "How long a case stored under the engineer's home directory, for want of a case folder, is kept unused. Default 14."}
+        "location": {"enum": ["home", "case"], "description": "Where each case's store lives: home keeps it under the engineer's home directory (~/.compa/cases/<case>), private and safe for shared case folders (default); case keeps it in the case folder's .compa directory, falling back to home where there is no case folder."},
+        "homeRetentionDays": {"type": "integer", "minimum": 1, "description": "How long a case stored under the engineer's home directory is kept unused. Default 14."}
       }
     },
     "collection": {

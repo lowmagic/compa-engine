@@ -119,15 +119,34 @@ type Intention struct {
 	Purpose  string `json:"purpose"`
 }
 
+const (
+	// StoreLocationHome keeps each case's store under the engineer's home
+	// directory (~/.compa/cases/<case>), the default.
+	StoreLocationHome = "home"
+	// StoreLocationCase keeps each case's store in the case folder's .compa
+	// directory, falling back to home where there is no case folder.
+	StoreLocationCase = "case"
+)
+
 type Storage struct {
+	// Location selects where case stores live: home (default) or case.
+	Location string `json:"location,omitempty"`
 	// HomeRetentionDays is how long a case stored under the engineer's
-	// home directory, for want of a case folder, is kept unused.
+	// home directory is kept unused.
 	HomeRetentionDays int `json:"homeRetentionDays,omitempty"`
 }
 
 // DefaultHomeRetention is how long an unused case under the engineer's
 // home directory is kept (docs/SPEC.md §2).
 const DefaultHomeRetention = 14 * 24 * time.Hour
+
+// StoreLocation returns the configured store location, defaulting to home.
+func (c *Config) StoreLocation() string {
+	if c.Storage.Location == StoreLocationCase {
+		return StoreLocationCase
+	}
+	return StoreLocationHome
+}
 
 func (c *Config) HomeRetention() time.Duration {
 	if d := c.Storage.HomeRetentionDays; d > 0 {

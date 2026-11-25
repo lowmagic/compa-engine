@@ -24,6 +24,7 @@ import (
 	"github.com/lowmagic/compa-engine/internal/model/openai"
 	"github.com/lowmagic/compa-engine/internal/model/vertexanthropic"
 	"github.com/lowmagic/compa-engine/internal/model/vertexgemini"
+	"github.com/lowmagic/compa-engine/internal/store"
 )
 
 // companionCase is the stub case the companion's tests work: its routing key's
@@ -57,8 +58,16 @@ func companionSession(t *testing.T, respond func(context.Context, model.Request)
 		t.Fatal(err)
 	}
 	e := &Engine{config: cfg, home: t.TempDir()}
-	c := testCase(t, 1<<20)
-	c.root = filepath.Join(td, "artifacts", "must-gather")
+	dir, inHome, err := e.storeLocation("", companionCase.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	st, err := store.Open(dir, companionCase.ID, store.Options{MaxBlobBytes: 1 << 20})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { st.Close() })
+	c := newOpenCase(companionCase.ID, filepath.Join(td, "artifacts", "must-gather"), dir, inHome, st)
 	e.cases, e.artifacts = nopCases{}, &snapshotArtifacts{root: c.root}
 	var n atomic.Int64
 	c.newID = func(p string) string { return fmt.Sprintf("%s-%d", p, n.Add(1)) }

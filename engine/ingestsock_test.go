@@ -40,9 +40,6 @@ func TestIngestServer(t *testing.T) {
 			t.Errorf("%s has mode %v; want %v", path, info.Mode().Perm(), want)
 		}
 	}
-	// The fixture keeps its store apart from its artifacts; the source
-	// points at the store's folder, as reopening it does.
-	s.e.artifacts = &snapshotArtifacts{root: filepath.Dir(s.c.storeDir)}
 	if got, err := s.e.IngestSocket(t.Context(), s.CaseID()); err != nil || got != socket {
 		t.Errorf("the store names %q, %v; want %q", got, err, socket)
 	}
