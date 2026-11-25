@@ -63,7 +63,7 @@ func newEnv(t *testing.T) *cliEnv {
 		}
 		os.WriteFile(filepath.Join(e.stub, name), data, 0o600)
 	}
-	e.caseStore = filepath.Join(e.cases, "00000001", store.DirName)
+	e.caseStore = filepath.Join(e.home, store.DirName, "cases", "00000001")
 	return e
 }
 
@@ -103,6 +103,9 @@ func (e *cliEnv) ok(args ...string) string {
 
 // hostConfig excludes a source's state directory, as a deployment's may.
 var hostConfig = []byte("apiVersion: compa.lowmag.cc/config/v1alpha1\nkind: Config\ncollection: {exclude: [.statedir]}\n")
+
+// caseFolderConfig opts into storing .compa inside the case folder.
+var caseFolderConfig = []byte("apiVersion: compa.lowmag.cc/config/v1alpha1\nkind: Config\ncollection: {exclude: [.statedir]}\nstorage: {location: case}\n")
 
 var evidenceID = regexp.MustCompile(`(?m)^(ev-[0-9a-f]{16})\s+(\S+)\s.*?(case \S+(?: comment \S+| artifacts| artifact counts)?)$`)
 
@@ -158,8 +161,8 @@ func TestOpenAcquiresTheCaseOnce(t *testing.T) {
 	if !strings.Contains(show, "7 items (artifact_counts 1, artifact_overview 1, case_comment 4, case_metadata 1)") || !strings.Contains(show, "subject: Pods on two workers") {
 		t.Errorf("case show:\n%s", show)
 	}
-	if _, err := os.Stat(filepath.Join(e.home, store.DirName)); err == nil {
-		t.Error("a case with a case folder was stored in the home directory")
+	if _, err := os.Stat(filepath.Join(e.cases, "00000001", store.DirName)); err == nil {
+		t.Error("default home storage created .compa in the case folder")
 	}
 	ov := e.ok("evidence", "show", "00000001", first["case 00000001 artifacts"][0])
 	for _, want := range []string{"artifacts of case 00000001 from local directory: 2 attachments", "attachment: 0010-must-gather\nstate: present\n", "attachment: 0020-pods.log\nstate: present\nsize: 24 bytes\nfile: 0020-pods.log\n"} {
@@ -270,9 +273,15 @@ func TestCaseWithoutAFolderIsOfferedItsFetch(t *testing.T) {
 					t.Errorf("output lacks %q:\n%s", w, got)
 				}
 			}
-			folder := "store: " + filepath.Join(e.cases, c.id, store.DirName)
-			if strings.Contains(got, folder) != c.inFolder {
-				t.Errorf("store in the case folder: %v, want %v:\n%s", !c.inFolder, c.inFolder, got)
+			homeStore := "store: " + filepath.Join(e.home, store.DirName, "cases", c.id)
+			if !strings.Contains(got, homeStore) {
+				t.Errorf("store not in home directory %q:\n%s", homeStore, got)
+			}
+			if _, err := os.Stat(filepath.Join(e.cases, c.id, store.DirName)); err == nil {
+				t.Errorf("default home storage created .compa in the case folder")
+			}
+			if hasNone := strings.Contains(got, "artifacts: none found"); hasNone == c.inFolder {
+				t.Errorf("artifacts none found = %v, want %v:\n%s", hasNone, !c.inFolder, got)
 			}
 		})
 	}
@@ -320,14 +329,14 @@ func TestInterruptedFetchOfferEnds(t *testing.T) {
 	}
 }
 
-// A case opened before its folder was found keeps its work when the
-// folder appears: the home store is moved into the folder, even past its
-// retention, rather than left behind and swept.
+// With storage.location set to case, a case opened before its folder was
+// found keeps its work when the folder appears: the home store is moved into
+// the folder, even past its retention, rather than left behind and swept.
 func TestHomeStoreMovesIntoTheCaseFolder(t *testing.T) {
 	e := newEnv(t)
-	e.ok("case", "open", "00000002")
+	e.runWith(caseFolderConfig, "case", "open", "00000002")
 	e.stdin = "an engineer's capture\n"
-	e.ok("in", "00000002")
+	e.runWith(caseFolderConfig, "in", "00000002")
 	home := filepath.Join(e.home, store.DirName, "cases", "00000002")
 	old := time.Now().Add(-15 * 24 * time.Hour)
 	s, err := store.Open(home, "00000002", store.Options{Now: func() time.Time { return old }})
@@ -338,23 +347,23 @@ func TestHomeStoreMovesIntoTheCaseFolder(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(e.cases, "00000002"), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	out := e.ok("case", "open", "00000002")
+	out := e.runWith(caseFolderConfig, "case", "open", "00000002")
 	if !strings.Contains(out, "moved the store made before the case folder was found from "+home) || !strings.Contains(out, "store: "+filepath.Join(e.cases, "00000002", store.DirName)) {
 		t.Errorf("open:\n%s", out)
 	}
 	if _, err := os.Stat(home); err == nil {
 		t.Error("the home store is still there")
 	}
-	if listed := e.ok("evidence", "list", "00000002"); !strings.Contains(listed, "ingested") {
+	if listed := e.runWith(caseFolderConfig, "evidence", "list", "00000002"); !strings.Contains(listed, "ingested") {
 		t.Errorf("the capture did not move:\n%s", listed)
 	}
 }
 
-// With a store in the folder already, a home store is not merged but kept
-// from the sweep, and the engineer told where it is.
+// With storage.location set to case and a store in the folder already, a home
+// store is not merged but kept from the sweep, and the engineer told where it is.
 func TestHomeStoreBesideAFolderStoreIsKept(t *testing.T) {
 	e := newEnv(t)
-	e.ok("case", "open", "00000002")
+	e.runWith(caseFolderConfig, "case", "open", "00000002")
 	home := filepath.Join(e.home, store.DirName, "cases", "00000002")
 	old := time.Now().Add(-15 * 24 * time.Hour)
 	s, err := store.Open(home, "00000002", store.Options{Now: func() time.Time { return old }})
@@ -368,12 +377,45 @@ func TestHomeStoreBesideAFolderStoreIsKept(t *testing.T) {
 		t.Fatal(err)
 	}
 	f.Close()
-	out := e.ok("case", "open", "00000002")
+	out := e.runWith(caseFolderConfig, "case", "open", "00000002")
 	if !strings.Contains(out, "an earlier store for this case is in "+home) || strings.Contains(out, "removed an expired store") {
 		t.Errorf("open:\n%s", out)
 	}
 	if _, err := os.Stat(filepath.Join(home, "case.db")); err != nil {
 		t.Errorf("the home store was removed: %v", err)
+	}
+}
+
+// Two engineers sharing one case folder each keep a private store under their
+// own home directory by default, so both can open and work the case at once
+// without lock or permission conflicts and without writing into the folder.
+func TestSharedCaseFolderAllowsConcurrentHomeStores(t *testing.T) {
+	e := newEnv(t)
+	homeA := t.TempDir()
+	homeB := t.TempDir()
+	openAs := func(home string) (*engine.Session, string) {
+		t.Helper()
+		eng, err := engine.New(engine.Options{
+			Cases: stubcases.New(e.stub), Artifacts: localdir.New(e.cases), Home: home, Config: hostConfig,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		sess, err := eng.StartSession(context.Background(), "00000001", nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return sess, sess.Store().Dir
+	}
+	sessA, dirA := openAs(homeA)
+	defer sessA.Close()
+	sessB, dirB := openAs(homeB)
+	defer sessB.Close()
+	if dirA != filepath.Join(homeA, store.DirName, "cases", "00000001") || dirB != filepath.Join(homeB, store.DirName, "cases", "00000001") {
+		t.Errorf("stores: A=%q B=%q", dirA, dirB)
+	}
+	if _, err := os.Stat(filepath.Join(e.cases, "00000001", store.DirName)); err == nil {
+		t.Error("opening a shared case folder created .compa inside it")
 	}
 }
 

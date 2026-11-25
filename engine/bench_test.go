@@ -90,7 +90,7 @@ func TestLargeCase(t *testing.T) {
 	_, second, allocs := run("case", "open", "00000001")
 	t.Logf("case open, repeat: %s, %d allocations, peak RSS %d MiB", second.Round(time.Millisecond), allocs, maxRSS()>>20)
 
-	storeDir := filepath.Join(folder, store.DirName)
+	storeDir := filepath.Join(home, store.DirName, "cases", "00000001")
 	before := dirBytes(storeDir)
 	_, took, allocs := run("in", "00000001", filepath.Join(folder, st.Largest))
 	grew := dirBytes(storeDir) - before

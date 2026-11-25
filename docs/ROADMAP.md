@@ -405,3 +405,19 @@ Delivers: User interface.
 Done when: `make check` passes; `chat.TestMarkdownShownWithoutMarkers`, `TestMarkdownRestrainedHierarchyAndNesting`,
 `TestMarkdownWraps`, `TestMarkdownCitations` and `TestMarkdownSpacesHeadingsAndDrawsRules` verify the distinct heading
 tiers, bullet lead-ins, `Next`/`For you` cues, code rails and citation styles.
+
+## 26. Case stores default to the engineer's home directory
+
+Status: done
+
+Case stores now default to `~/.compa/cases/<case>` (`storage.location: home`, private `0700`/`0600`, swept after
+`storage.homeRetentionDays`) instead of `<case>/.compa`, so engineers working a shared case folder concurrently never
+collide on file permissions, exclusive SQLite locks or ingest sockets, and the case artifact folder stays untouched.
+Deployments or users that want `<case>/.compa` can opt in with `storage.location: case`.
+
+Delivers: Evidence storage.
+
+Done when: `make check` passes; `cli_test.TestOpenAcquiresTheCaseOnce`, `TestCaseWithoutAFolderIsOfferedItsFetch`,
+`TestSharedCaseFolderAllowsConcurrentHomeStores`, `TestHomeStoreMovesIntoTheCaseFolder` and
+`TestHomeStoreBesideAFolderStoreIsKept` verify the home default, concurrent shared-folder opens, and opt-in
+case-folder storage.

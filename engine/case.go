@@ -15,6 +15,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/lowmagic/compa-engine/internal/config"
 	"github.com/lowmagic/compa-engine/internal/evidence"
 	"github.com/lowmagic/compa-engine/internal/sources"
 	"github.com/lowmagic/compa-engine/internal/store"
@@ -64,10 +65,22 @@ func (c *openCase) Close() error {
 // command that only reads does not create a store.
 var errNotOpened = errors.New("has not been opened")
 
-// open resolves where a case's store lives and opens it. The store goes in
-// the case's artifact directory, the case folder where there is one,
-// and under the home directory when there is none. With create
-// false, a case with no store yet is errNotOpened.
+// storeLocation resolves where a case's store lives according to
+// storage.location: under the engineer's home directory by default (home),
+// or in the case folder's .compa directory when configured (case, falling
+// back to home where there is no case folder).
+func (e *Engine) storeLocation(root, id string) (dir string, inHome bool, err error) {
+	if e.config.StoreLocation() == config.StoreLocationCase {
+		return store.Location(root, e.home, id)
+	}
+	return store.Location("", e.home, id)
+}
+
+// open resolves where a case's store lives and opens it. By default the store
+// goes under the engineer's home directory (~/.compa/cases/<id>), keeping
+// shared case folders untouched; with storage.location set to case, it goes
+// in the case folder's .compa directory when one exists. With create false, a
+// case with no store yet is errNotOpened.
 func (e *Engine) open(ctx context.Context, id string, create bool) (*openCase, error) {
 	root, err := e.artifacts.Root(ctx, id)
 	var rootErr error
@@ -77,7 +90,7 @@ func (e *Engine) open(ctx context.Context, id string, create bool) (*openCase, e
 	if err != nil {
 		return nil, err
 	}
-	dir, inHome, err := store.Location(root, e.home, id)
+	dir, inHome, err := e.storeLocation(root, id)
 	if err != nil {
 		return nil, err
 	}

@@ -263,7 +263,7 @@ func (e *Engine) IngestSocket(ctx context.Context, id string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	dir, _, err := store.Location(root, e.home, id)
+	dir, _, err := e.storeLocation(root, id)
 	if err != nil {
 		return "", err
 	}

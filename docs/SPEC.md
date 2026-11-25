@@ -29,7 +29,7 @@ A support engineer opens a case, or a troubleshooting chat with no case.
 - Persist source metadata, every tool result as immutable evidence with its provenance, the conversation, and the engineer's items.
 - Compress retained large payloads; do not assume compressed bytes reduce model tokens.
 - Give each piece of evidence an identifier a model and the engineer can cite, with line numbers that survive storage.
-- Store case data by default in a `.compa/` subdirectory of the case folder, where it follows the case's existing retention process. Where the case folder is unavailable, store it in the engineer's home directory and delete it after 14 calendar days unused by default, the interval configurable; when the case folder is found later, move it there. A troubleshooting chat with no case is stored under the engineer's home directory and swept the same way.
+- Store case data by default under the engineer's home directory (`~/.compa/cases/<case>`), private to the engineer (`0700`/`0600`) so multiple engineers can open a shared case folder concurrently without permission or lock conflicts, and sweep unused home stores after 14 calendar days by default (configurable via `storage.homeRetentionDays`). A deployment or engineer can opt into `storage.location: case` to store `.compa/` inside the case folder (falling back to home and adopting it when the folder appears). A troubleshooting chat with no case is stored under the engineer's home directory and swept the same way.
 
 ### 3. The companion
 

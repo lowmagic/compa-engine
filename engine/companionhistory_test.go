@@ -2,7 +2,6 @@ package engine
 
 import (
 	"context"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -20,16 +19,14 @@ func (historyCases) Case(context.Context, string) (Case, error) {
 	return companionCase, nil
 }
 
-// The companion fixture keeps its store in a temporary directory apart
-// from its read-only artifact tree. Point the source at that directory to
-// reopen the persisted case through the public session lifecycle.
+// reopenHistorySession closes the fixture session and reopens its persisted
+// home store through the public session lifecycle.
 func reopenHistorySession(t *testing.T, s *Session) *Session {
 	t.Helper()
 	if err := s.Close(); err != nil {
 		t.Fatal(err)
 	}
 	s.e.cases = historyCases{}
-	s.e.artifacts = &snapshotArtifacts{root: filepath.Dir(s.c.storeDir)}
 	reopened, err := s.e.StartSession(t.Context(), s.CaseID(), nil)
 	if err != nil {
 		t.Fatal(err)

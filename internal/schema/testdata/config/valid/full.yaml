@@ -25,4 +25,4 @@ reasoning:
     local-model: {provider: openai, model: example/local-model, efforts: [low, high]}
   profiles:
     companion: {model: gemini-3.8-flash}
-storage: {homeRetentionDays: 14}
+storage: {location: home, homeRetentionDays: 14}
