@@ -13,13 +13,14 @@ import (
 )
 
 // Markdown in what the engineer reads — a model's answer, a draft, a
-// handoff — is shown with restrained stress: tiered headings (# underlined
-// banner, ## coloured heading, ### bold subsection), rare **bold**, *italic*,
-// `code`, plain `-` and ordered lists with nested items and continuation
-// blocks aligned under their parent's text, indented or top-level fenced code
-// blocks with their fence lines dropped, quotes and links, wrapped to the
-// terminal's width. It is display only: what models are sent and what /copy
-// copies is the text as stored. Only * marks emphasis, never _, which
+// handoff — is shown with restrained stress: tiered coloured headings (#
+// blue underlined banner, ## magenta heading, ### yellow subsection, plus
+// green/yellow Next and For you cues), rare **bold**, *italic*, `code` in
+// cyan, fenced code blocks behind a dim left rail, quiet grey evidence
+// citations, plain `-` and ordered lists with nested items and continuation
+// blocks aligned under their parent's text, quotes and links, wrapped to
+// the terminal's width. It is display only: what models are sent and what
+// /copy copies is the text as stored. Only * marks emphasis, never _, which
 // identifiers are full of; a * is emphasis only where it opens before a word
 // and closes after one, so ls *.log stays as it is.
 
@@ -220,6 +221,16 @@ func (r renderer) render(text string, quiet func(string) bool) string {
 			out = append(out, r.heading(len(m[1]), m[2])...)
 			continue
 		}
+		if mdNextHead.MatchString(l) {
+			levels = nil
+			out = append(out, r.wrap("", "", r.inline(stripOuterBold(trimmed), nextW))...)
+			continue
+		}
+		if mdForYou.MatchString(l) {
+			levels = nil
+			out = append(out, r.wrap("", "", r.inline(stripOuterBold(trimmed), forYouW))...)
+			continue
+		}
 		if m := mdItem.FindStringSubmatch(l); m != nil {
 			raw := len(m[1])
 			mark := m[2]
@@ -230,8 +241,17 @@ func (r renderer) render(text string, quiet func(string) bool) string {
 			top := levels[len(levels)-1]
 			pad := strings.Repeat(" ", top.col)
 			hang := strings.Repeat(" ", top.textCol)
-			body := stripLeadBold(m[3])
-			out = append(out, r.wrap(pad+bulletW.Render(mark)+" ", hang, r.inline(body, plainW))...)
+			markStyle := bulletW
+			if isOptionMark(mark) {
+				markStyle = optionW
+			}
+			var rendered string
+			if label, rest, ok := splitLeadBold(m[3]); ok {
+				rendered = labelW.Render(label) + " " + r.inline(rest, plainW)
+			} else {
+				rendered = r.inline(m[3], plainW)
+			}
+			out = append(out, r.wrap(pad+markStyle.Render(mark)+" ", hang, rendered)...)
 			continue
 		}
 		if m := mdQuote.FindStringSubmatch(l); m != nil && strings.HasPrefix(l, ">") {
@@ -282,17 +302,33 @@ func popLevelsForBody(levels []listLevel, raw int) []listLevel {
 	return levels
 }
 
-// stripLeadBold removes routine AI-style bolding on a list item's "Label: "
-// lead-in while preserving genuine emphasis elsewhere in the item.
-func stripLeadBold(s string) string {
+// splitLeadBold splits routine AI-style bolding on a list item's "Label: "
+// lead-in into the unbolded label and the rest of the item, so the label can
+// be tinted without bolding while genuine emphasis elsewhere is preserved.
+func splitLeadBold(s string) (label, rest string, ok bool) {
 	m := mdLeadBold.FindStringSubmatch(s)
 	if m == nil {
-		return s
+		return "", "", false
 	}
 	if m[1] != "" {
-		return m[1] + m[2] + " " + m[3]
+		return m[1] + m[2], m[3], true
 	}
-	return m[4] + " " + m[5]
+	return m[4], m[5], true
+}
+
+// isOptionMark reports whether a list marker is an uppercase letter choice
+// such as A. or B), used for selectable Next steps.
+func isOptionMark(mark string) bool {
+	return len(mark) == 2 && mark[0] >= 'A' && mark[0] <= 'Z' && (mark[1] == '.' || mark[1] == ')')
+}
+
+// stripOuterBold removes surrounding ** markers from a standalone section cue
+// such as **Next:** or **For you:**.
+func stripOuterBold(s string) string {
+	if strings.HasPrefix(s, "**") && strings.HasSuffix(s, "**") && len(s) > 4 {
+		return s[2 : len(s)-2]
+	}
+	return s
 }
 
 func leadingSpaces(s string) int {
@@ -328,21 +364,30 @@ func (r renderer) heading(level int, body string) []string {
 	}
 }
 
-// codeLine renders one line inside a fenced code block, preserving indentation
-// beyond the opening fence's source column and aligning the block at col.
+// codeLine renders one line inside a fenced code block behind a dim left rail,
+// preserving indentation beyond the opening fence's source column and aligning
+// the code text at col.
 func (r renderer) codeLine(l string, fenceRaw, col int) []string {
 	if strings.TrimSpace(l) == "" {
 		return []string{""}
 	}
 	strip := min(leadingSpaces(l), fenceRaw)
 	body := l[strip:]
-	pad := strings.Repeat(" ", col)
-	if r.width <= 0 || r.width-col < minRoom {
-		return r.hard(pad+body, codeW)
+	leadW := max(col, 2)
+	prefix := strings.Repeat(" ", leadW-2) + faintW.Render("│ ")
+	if r.width <= 0 {
+		return []string{prefix + codeW.Render(body)}
 	}
-	rows := strings.Split(ansi.Hardwrap(body, r.width-col, true), "\n")
+	if r.width-leadW < minRoom {
+		rows := strings.Split(ansi.Hardwrap(body, r.width, true), "\n")
+		for i := range rows {
+			rows[i] = codeW.Render(rows[i])
+		}
+		return rows
+	}
+	rows := strings.Split(ansi.Hardwrap(body, r.width-leadW, true), "\n")
 	for i := range rows {
-		rows[i] = codeW.Render(pad + rows[i])
+		rows[i] = prefix + codeW.Render(rows[i])
 	}
 	return rows
 }
@@ -365,18 +410,6 @@ func (r renderer) wrap(first, rest, s string) []string {
 			continue
 		}
 		rows[i] = rest + rows[i]
-	}
-	return rows
-}
-
-// hard cuts a line kept as written at the width, each row in st.
-func (r renderer) hard(l string, st lipgloss.Style) []string {
-	if r.width <= 0 {
-		return []string{st.Render(l)}
-	}
-	rows := strings.Split(ansi.Hardwrap(l, r.width, true), "\n")
-	for i := range rows {
-		rows[i] = st.Render(rows[i])
 	}
 	return rows
 }

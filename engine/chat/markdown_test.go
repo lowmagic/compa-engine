@@ -25,14 +25,15 @@ func TestMarkdownShownWithoutMarkers(t *testing.T) {
 		{"- **Symptom:** pod failed", "- Symptom: pod failed"},
 		{"> quoted", "│ quoted"},
 		{"See [the doc](https://example.test/doc).", "See the doc (https://example.test/doc)."},
-		{"```\nls **x**\n```\nafter **b**", "  ls **x**\nafter b"},
+		{"```\nls **x**\n```\nafter **b**", "│ ls **x**\nafter b"},
 	} {
 		if got := ansi.Strip(markdown(tc.in, 0, nil)); got != tc.want {
 			t.Errorf("markdown(%q)\n  got %q\n want %q", tc.in, got, tc.want)
 		}
 	}
-	// Styled: bold and code each carry their own sequence, while list markers
-	// and routine bullet lead-ins are never bolded.
+	// Styled: bold, code, bullet lead-in labels, lettered options and Next/For you
+	// cues each carry their own style, while list markers and routine bullet
+	// lead-ins are never bolded.
 	got := markdown("a **b** `c`", 0, nil)
 	if !strings.Contains(got, plainW.Bold(true).Render("b")) || !strings.Contains(got, codeW.Render("c")) {
 		t.Errorf("not styled: %q", got)
@@ -40,6 +41,15 @@ func TestMarkdownShownWithoutMarkers(t *testing.T) {
 	bullet := markdown("- **Symptom:** pod failed", 0, nil)
 	if strings.Contains(bullet, plainW.Bold(true).Render("Symptom")) || strings.Contains(bullet, plainW.Bold(true).Render("-")) {
 		t.Errorf("routine bullet lead-in or marker was bolded: %q", bullet)
+	}
+	if !strings.Contains(bullet, labelW.Render("Symptom:")) || !strings.Contains(bullet, bulletW.Render("-")) {
+		t.Errorf("bullet lead-in or marker not styled: %q", bullet)
+	}
+	cues := markdown("Next (enter a letter):\nA. check logs\n\nFor you:\n- collect dump", 0, nil)
+	if !strings.Contains(cues, nextW.Render("Next (enter a letter):")) ||
+		!strings.Contains(cues, optionW.Render("A.")) ||
+		!strings.Contains(cues, forYouW.Render("For you:")) {
+		t.Errorf("Next/For you cues or lettered options not styled: %q", cues)
 	}
 }
 
@@ -113,9 +123,9 @@ func TestMarkdownRestrainedHierarchyAndNesting(t *testing.T) {
 		"     Nested under the nested list, should align with the text, not the bullet",
 		"     This is two levels deep",
 		"",
-		"     # needs to be able to handle an indented hash",
+		"   │ # needs to be able to handle an indented hash",
 		"",
-		"  code blocks",
+		"│ code blocks",
 		"",
 		"Bolding text should be extremely rare and only for extreme emphasis",
 	}, "\n")
@@ -125,6 +135,9 @@ func TestMarkdownRestrainedHierarchyAndNesting(t *testing.T) {
 	raw := markdown("# H1\n\n## H2\n\n### H3", 80, nil)
 	if !strings.Contains(raw, h1W.Render("H1")) || !strings.Contains(raw, headingW.Render("H2")) || !strings.Contains(raw, h3W.Render("H3")) {
 		t.Errorf("headings did not render in distinct tiers: %q", raw)
+	}
+	if h1W.Render("X") == headingW.Render("X") || headingW.Render("X") == h3W.Render("X") || h1W.Render("X") == h3W.Render("X") {
+		t.Errorf("heading tiers share a style: h1=%q h2=%q h3=%q", h1W.Render("X"), headingW.Render("X"), h3W.Render("X"))
 	}
 }
 
@@ -147,8 +160,8 @@ func TestMarkdownWraps(t *testing.T) {
 		"   so we see when the sync error started\n" +
 		"│ a quoted line long enough that it\n" +
 		"│ takes a second row at this width too\n" +
-		"  " + strings.Repeat("x", 38) + "\n" +
-		"  " + strings.Repeat("x", 12)
+		"│ " + strings.Repeat("x", 38) + "\n" +
+		"│ " + strings.Repeat("x", 12)
 	if got != want {
 		t.Errorf("markdown at width 40:\n%s\nwant:\n%s", got, want)
 	}
@@ -180,7 +193,7 @@ func TestMarkdownCitations(t *testing.T) {
 // block.
 func TestMarkdownSpacesHeadingsAndDrawsRules(t *testing.T) {
 	in := "## First\ntext\n## Second\n\n## Third\n---\n```\n---\n## not a heading\n```"
-	want := "First\ntext\n\nSecond\n\nThird\n" + strings.Repeat("─", 20) + "\n  ---\n  ## not a heading"
+	want := "First\ntext\n\nSecond\n\nThird\n" + strings.Repeat("─", 20) + "\n│ ---\n│ ## not a heading"
 	if got := ansi.Strip(markdown(in, 20, nil)); got != want {
 		t.Errorf("markdown:\n%s\nwant:\n%s", got, want)
 	}
