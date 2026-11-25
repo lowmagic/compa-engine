@@ -389,3 +389,19 @@ Delivers: Collection.
 Done when: `make check` passes; `collect.TestGrepKeep`, `TestGrepKeepFromEnd`, `TestGrepRefusesBadKeep` and
 `TestCheckStage` verify single- and multi-file runs, match and context overlap, match-limit accounting, `from: end`
 eviction and cap holding, zero-value identity, and out-of-range refusals.
+
+## 25. Distinct chat colour hierarchy and quiet citations
+
+Status: done
+
+The chat separates Markdown and transcript roles across the terminal's 16 ANSI colours without painting backgrounds:
+distinct heading tiers (`#` blue underlined, `##` magenta, `###` yellow), green `Next:` and yellow `For you:` section
+cues, bold-green lettered choice markers (`A.`, `B.`) beside grey list markers and yellow unbolded bullet lead-in
+labels, quiet grey evidence citations (flagged citations remaining bold red), cyan inline code and fenced code blocks
+behind a dim `│ ` left rail, and blue-tinted tool call names with faint outcomes and questions.
+
+Delivers: User interface.
+
+Done when: `make check` passes; `chat.TestMarkdownShownWithoutMarkers`, `TestMarkdownRestrainedHierarchyAndNesting`,
+`TestMarkdownWraps`, `TestMarkdownCitations` and `TestMarkdownSpacesHeadingsAndDrawsRules` verify the distinct heading
+tiers, bullet lead-ins, `Next`/`For you` cues, code rails and citation styles.

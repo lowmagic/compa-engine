@@ -684,31 +684,69 @@ func (m *model) debugAnswers(batch []toolRun) {
 	})
 }
 
-// toolRows are the dim rows naming the tool calls of a batch, what each
+// toolRows are the compact rows naming the tool calls of a batch, what each
 // stored and each refusal or failure, each followed by its own question:
 // one row, the calls apart by callSep, where it fits the terminal's
 // width; otherwise a row for each call, the first under the batch's mark,
 // each cut to the width, so every call keeps its question beside it.
 func toolRows(batch []toolRun, width int) []string {
-	calls := make([]string, len(batch))
+	plain := make([]string, len(batch))
+	styled := make([]string, len(batch))
 	for i, r := range batch {
-		calls[i] = text.Safe(firstLine(toolOutcome(r)))
-		if q := engine.QuestionOf(r.name, r.args); q != "" {
-			calls[i] += " · " + text.Safe(q)
+		out := text.Safe(firstLine(toolOutcome(r)))
+		q := engine.QuestionOf(r.name, r.args)
+		plain[i] = out
+		if q != "" {
+			plain[i] += " · " + text.Safe(q)
 		}
+		styled[i] = styleToolCall(r, out, q)
 	}
-	if s := toolMark + strings.Join(calls, callSep); width <= 0 || ansi.StringWidth(s) <= width {
-		return []string{faintW.Render(s)}
+	if s := toolMark + strings.Join(plain, callSep); width <= 0 || ansi.StringWidth(s) <= width {
+		return []string{faintW.Render(toolMark) + strings.Join(styled, faintW.Render(callSep))}
 	}
-	rows := make([]string, len(calls))
-	for i, c := range calls {
-		lead := toolMark
+	rows := make([]string, len(styled))
+	for i, c := range styled {
+		lead := faintW.Render(toolMark)
 		if i > 0 {
 			lead = strings.Repeat(" ", ansi.StringWidth(toolMark))
 		}
-		rows[i] = faintW.Render(ansi.Truncate(lead+c, width, "…"))
+		rows[i] = ansi.Truncate(lead+c, width, "…")
 	}
 	return rows
+}
+
+// styleToolCall tints the tool action in blue (red on error) and keeps
+// outcomes, evidence names and questions faint so tool lines stay scannable
+// without competing with answers.
+func styleToolCall(r toolRun, out, question string) string {
+	var b strings.Builder
+	switch {
+	case r.isError:
+		if head, tail, ok := strings.Cut(out, " ✗ "); ok {
+			b.WriteString(toolW.Render(head))
+			b.WriteString(errorW.Render(" ✗ " + tail))
+		} else {
+			b.WriteString(errorW.Render(out))
+		}
+	case !r.done:
+		if head, tail, ok := strings.Cut(out, " (cancelled)"); ok {
+			b.WriteString(toolW.Render(head))
+			b.WriteString(warnW.Render(" (cancelled)" + tail))
+		} else {
+			b.WriteString(faintW.Render(out))
+		}
+	default:
+		if head, tail, ok := strings.Cut(out, " → "); ok {
+			b.WriteString(toolW.Render(head))
+			b.WriteString(faintW.Render(" → " + tail))
+		} else {
+			b.WriteString(toolW.Render(out))
+		}
+	}
+	if question != "" {
+		b.WriteString(faintW.Render(" · " + text.Safe(question)))
+	}
+	return b.String()
 }
 
 // toolMark leads a batch's tool row, and callSep parts its calls on one.
