@@ -209,7 +209,7 @@ var benchRoles = map[string]string{"c1": "find", "c2": "pods", "c3": "evict", "c
 // benchSolution is the knowledge-base solution the replay fetches, its
 // page synthetic: a precedent, about another environment than the case's.
 const (
-	benchSolutionID   = 7001234
+	benchSolutionID   = "7001234"
 	benchSolutionPage = "../testdata/replay/references/kcs-solution-7001234.txt"
 )
 
@@ -282,7 +282,7 @@ func (m *benchMain) respond(_ context.Context, r model.Request) (*modelfixture.A
 			call("c7", "read", map[string]any{"path": "nodes/worker-1/var/log/ceph/ceph-osd.3.log"}),
 			call("c8", "read", map[string]any{"path": "namespaces/openshift-storage/events.yaml"}),
 			call("c9", "grep", map[string]any{"pattern": "SyncLoop UPDATE", "path": "nodes/worker-1/kubelet.log"}),
-			call("c10", "kcs_fetch", map[string]any{"id": float64(benchSolutionID), "kind": "solution"}),
+			call("c10", "kcs_fetch", map[string]any{"id": benchSolutionID, "kind": "solution"}),
 			call("c11", consultTool, map[string]any{"expert": "openshift.platform",
 				"question": "What does the kubelet's SyncLoop UPDATE of openshift-storage/rook-ceph-osd-3-7d9f8 at 08:14:11 on worker-1 show?"}),
 			call("c12", "read", map[string]any{"path": "cluster-scoped-resources/config.openshift.io/proxies/cluster.yaml", "head": float64(8)}),

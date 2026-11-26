@@ -123,7 +123,7 @@ type ReferenceSearchResult struct {
 // where the service gave none. A hit carries no body: fetch it before
 // citing it.
 type SearchHit struct {
-	ID                   int
+	ID                   string
 	Kind                 string
 	Title                string
 	URL                  string
@@ -135,7 +135,7 @@ type SearchHit struct {
 // ReferenceID identifies a document to fetch.
 type ReferenceID struct {
 	Service string
-	ID      int
+	ID      string
 	Kind    string
 }
 
@@ -161,7 +161,7 @@ const (
 // ReferenceDocument is one page of a fetched document. A field the service
 // did not give is nil, or zero for Modified.
 type ReferenceDocument struct {
-	ID       int
+	ID       string
 	Kind     string
 	Title    *string
 	URL      *string
@@ -315,7 +315,7 @@ func searchItem(q ReferenceQuery, res ReferenceSearchResult, why string, at time
 	var b strings.Builder
 	fmt.Fprintf(&b, "service: %s\nquery: %s\ntime: %s\noutcome: %s\ntotal: %d · returned: %d\n", q.Service, res.QuerySent, at.Format(time.RFC3339), res.Outcome, res.Total, len(res.Documents))
 	for i, h := range res.Documents {
-		fmt.Fprintf(&b, "%d. %s %d: %s", i+1, h.Kind, h.ID, h.Title)
+		fmt.Fprintf(&b, "%d. %s %s: %s", i+1, h.Kind, h.ID, h.Title)
 		if h.URL != "" {
 			b.WriteString(" — " + h.URL)
 		}
@@ -338,7 +338,11 @@ func searchItem(q ReferenceQuery, res ReferenceSearchResult, why string, at time
 			note += ": the search found nothing, which describes the search, not the case"
 		}
 	case SearchTruncated:
-		note = fmt.Sprintf("%s search for %q: %d of %d returned", q.Service, res.QuerySent, len(res.Documents), res.Total)
+		if res.Total > 0 {
+			note = fmt.Sprintf("%s search for %q: %d of %d returned", q.Service, res.QuerySent, len(res.Documents), res.Total)
+		} else {
+			note = fmt.Sprintf("%s search for %q: %d returned (more available)", q.Service, res.QuerySent, len(res.Documents))
+		}
 	default:
 		note = fmt.Sprintf("%s search for %q: %s, so it says nothing of what the service holds", q.Service, res.QuerySent, res.Outcome)
 	}
@@ -418,11 +422,11 @@ func (e *Engine) fetch(ctx context.Context, c *openCase, ref ReferenceID, page i
 // the location, and in its note the service, the document, its state and
 // time, the page and the outcome.
 func documentItem(service string, doc ReferenceDocument, why string) evidence.Item {
-	location := fmt.Sprintf("%s %s %d", service, doc.Kind, doc.ID)
+	location := fmt.Sprintf("%s %s %s", service, doc.Kind, doc.ID)
 	if doc.URL != nil && *doc.URL != "" {
 		location = *doc.URL
 	}
-	parts := []string{fmt.Sprintf("%s %s %d, page %d", service, doc.Kind, doc.ID, doc.Page)}
+	parts := []string{fmt.Sprintf("%s %s %s, page %d", service, doc.Kind, doc.ID, doc.Page)}
 	if doc.Title != nil {
 		parts = append(parts, fmt.Sprintf("%q", *doc.Title))
 	}
@@ -491,9 +495,9 @@ func (e *Engine) lookupOffers() []LookupOffer {
 					}})
 			case ReferenceFetch:
 				out = append(out, LookupOffer{Service: id, Operation: ReferenceFetch,
-					Description: "Fetch one page of a " + id + " document by its number, as a search hit or a case comment names it.",
+					Description: "Fetch one page of a " + id + " document by its identifier or key, as a search hit or a case comment names it.",
 					Params: map[string]expert.Param{
-						"id":   {Type: "integer", Minimum: num(1), Description: "the document's number"},
+						"id":   {Type: "string", MaxLength: 128, Description: "the document's identifier or key"},
 						"kind": {Type: "string", Enum: kinds, Description: "the kind of document"},
 						"page": {Type: "integer", Minimum: num(1), Default: 1, Description: "the page, from 1; a page says whether more follow"},
 					}})
@@ -521,7 +525,8 @@ func (e *Engine) runLookup(ctx context.Context, c *openCase, l Lookup, fromCase 
 		}
 		return e.search(ctx, c, q, fromCase)
 	case ReferenceFetch:
-		ref := ReferenceID{Service: l.Service, ID: intParam(l.Params, "id", 0), Kind: kind}
+		id, _ := l.Params["id"].(string)
+		ref := ReferenceID{Service: l.Service, ID: id, Kind: kind}
 		return e.fetch(ctx, c, ref, intParam(l.Params, "page", 1), fromCase)
 	}
 	return evidence.Item{}, false, fmt.Errorf("a lookup is a search or a fetch, not %q", l.Operation)

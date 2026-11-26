@@ -126,7 +126,7 @@ func TestReferenceAdapterCredentialIsolation(t *testing.T) {
 
 // What a lookup stores for one case is in that case's store alone.
 func TestReferenceCaseIsolation(t *testing.T) {
-	f := &fakeReferences{id: "kcs", search: ReferenceSearchResult{Total: 1, Documents: []SearchHit{{ID: 1, Kind: "Solution", Title: "etcd"}}}}
+	f := &fakeReferences{id: "kcs", search: ReferenceSearchResult{Total: 1, Documents: []SearchHit{{ID: "1", Kind: "Solution", Title: "etcd"}}}}
 	e, one := referenceCase(t, f)
 	_, other := actionCaseWith(t, "")
 	it, err := e.lookupSearch(context.Background(), one, ReferenceQuery{Service: "kcs", Text: "etcd"}, false)
@@ -144,7 +144,7 @@ func TestReferenceCaseIsolation(t *testing.T) {
 func TestReferenceStorageBeforeDisclosure(t *testing.T) {
 	f := &fakeReferences{id: "kcs", pages: map[int]ReferenceDocument{1: {Title: str("Etcd slow disk"), State: str("verified"), Body: "## Issue\n\netcd warns of slow fdatasync."}}}
 	e, c := referenceCase(t, f)
-	it, err := e.lookupFetch(context.Background(), c, ReferenceID{Service: "kcs", ID: 4321, Kind: "solution"}, 1, false)
+	it, err := e.lookupFetch(context.Background(), c, ReferenceID{Service: "kcs", ID: "4321", Kind: "solution"}, 1, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -166,7 +166,7 @@ func TestReferenceStorageBeforeDisclosure(t *testing.T) {
 // found nothing says it describes the search; one that did not complete
 // says it says nothing of what the service holds, and keeps no hits.
 func TestReferenceSearchOutcomes(t *testing.T) {
-	hits := []SearchHit{{ID: 1, Kind: "Solution", Title: "a", State: "verified"}, {ID: 2, Kind: "Article", Title: "b"}}
+	hits := []SearchHit{{ID: "1", Kind: "Solution", Title: "a", State: "verified"}, {ID: "2", Kind: "Article", Title: "b"}}
 	cases := []struct {
 		name string
 		res  ReferenceSearchResult
@@ -176,6 +176,7 @@ func TestReferenceSearchOutcomes(t *testing.T) {
 		{"complete_none", ReferenceSearchResult{}, nil, "the search found nothing, which describes the search"},
 		{"complete", ReferenceSearchResult{Total: 2, Documents: hits}, nil, "complete, 2 found"},
 		{"truncated", ReferenceSearchResult{Total: 40, Documents: hits}, nil, "2 of 40 returned"},
+		{"truncated_no_total", ReferenceSearchResult{Outcome: SearchTruncated, Documents: hits}, nil, "2 returned (more available)"},
 		{"denied", ReferenceSearchResult{Outcome: SearchDenied, Documents: hits}, errors.New("401"), "denied, so it says nothing"},
 		{"failed", ReferenceSearchResult{}, errors.New("connection reset"), "failed, so it says nothing"},
 		{"unavailable", ReferenceSearchResult{Outcome: SearchUnavailable}, errors.New("no token"), "unavailable, so it says nothing"},
@@ -233,7 +234,7 @@ func TestReferenceFetchOutcomes(t *testing.T) {
 	for _, tc := range cases {
 		f := &fakeReferences{id: "kcs", pages: map[int]ReferenceDocument{tc.page: tc.doc}, fetchE: tc.err}
 		e, c := referenceCase(t, f)
-		it, err := e.lookupFetch(context.Background(), c, ReferenceID{Service: "kcs", ID: 99, Kind: "solution"}, tc.page, false)
+		it, err := e.lookupFetch(context.Background(), c, ReferenceID{Service: "kcs", ID: "99", Kind: "solution"}, tc.page, false)
 		if err != nil {
 			t.Fatalf("%s: %v", tc.name, err)
 		}
